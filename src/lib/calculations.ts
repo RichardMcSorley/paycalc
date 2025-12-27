@@ -4,6 +4,7 @@ export interface CalculationSettings {
   perItem: number;         // minutes per item (shopping)
   avgSpeed: number;        // mph
   expectedPay: number;     // $/hour target
+  minHourlyPay: number;    // minimum $/hour floor (0 = disabled)
   maxOrdersPerHour: number; // max orders possible per hour
   return1Drop: number;     // return % for 1 drop
   return2Drop: number;     // return % for 2 drops
@@ -45,6 +46,7 @@ export const DEFAULT_SETTINGS: CalculationSettings = {
   perItem: 1.5,
   avgSpeed: 35,
   expectedPay: 21,
+  minHourlyPay: 0,
   maxOrdersPerHour: 3,
   return1Drop: 100,
   return2Drop: 50
@@ -156,6 +158,8 @@ export interface OfferEvaluation {
     // Items (given current pay, pickups, drops, miles)
     maxItemsForDecent: number;
     maxItemsForGood: number | null;
+    // Pay (given current time)
+    minPayForGood: number;
     // Whether GOOD is achievable
     canBeGood: boolean;
   };
@@ -192,12 +196,15 @@ export function evaluateOffer(
   const effectiveHourly = Math.round(pay * ordersPerHour * 100) / 100;
 
   // Determine verdict
-  const meetsRequired = pay >= payReq.payReq;
+  // When minHourlyPay is set, use it as the floor; otherwise use the calculated payReq
+  const meetsFloor = settings.minHourlyPay > 0
+    ? effectiveHourly >= settings.minHourlyPay
+    : pay >= payReq.payReq;
   let verdict: Verdict;
   let verdictEmoji: string;
   let verdictText: string;
 
-  if (!meetsRequired) {
+  if (!meetsFloor) {
     verdict = 'bad';
     verdictEmoji = '🔴';
     verdictText = 'BAD';
@@ -250,6 +257,12 @@ export function evaluateOffer(
   const maxItemsForDecent = Math.max(0, Math.floor(availableTimeForItems / perItem));
   const maxItemsForGood = canBeGood ? maxItemsForDecent : null;
 
+  // PAY THRESHOLD (given current time)
+  // minPayForGood = expectedPay / ordersPerHour
+  const minPayForGood = ordersPerHour > 0
+    ? Math.round((expectedPay / ordersPerHour) * 100) / 100
+    : 0;
+
   // Build summary
   let summary: string;
   if (miles > 0) {
@@ -276,6 +289,7 @@ export function evaluateOffer(
       maxTimeForGood,
       maxItemsForDecent,
       maxItemsForGood,
+      minPayForGood,
       canBeGood
     },
     breakdown: {

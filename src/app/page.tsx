@@ -85,7 +85,8 @@ export default function Home() {
     const saved = localStorage.getItem('paycalc-settings');
     if (saved) {
       try {
-        setSettings(JSON.parse(saved));
+        // Merge with defaults to handle new settings fields
+        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
       } catch {
         // ignore
       }
@@ -227,6 +228,12 @@ export default function Home() {
                 label="Target $/hr"
                 value={settings.expectedPay}
                 onChange={(v) => updateSettings({ ...settings, expectedPay: v })}
+                prefix="$"
+              />
+              <SettingInput
+                label="Min $/hr"
+                value={settings.minHourlyPay}
+                onChange={(v) => updateSettings({ ...settings, minHourlyPay: v })}
                 prefix="$"
               />
               <SettingInput
@@ -427,7 +434,7 @@ export default function Home() {
         {/* Thresholds Card - show when not GOOD */}
         {hasOffer && results && hasRoute && results.verdict !== 'good' && (
           <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4">
-            <div className={`grid ${parseInt(items) > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-4 text-center`}>
+            <div className={`grid ${parseInt(items) > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-4 text-center`}>
               {/* Miles */}
               {(() => {
                 const currentMiles = parseFloat(miles) || 0;
@@ -487,6 +494,23 @@ export default function Home() {
                   </div>
                 );
               })()}
+
+              {/* Pay */}
+              {(() => {
+                const currentPay = parseFloat(pay) || 0;
+                const minPay = results.evaluation.thresholds.minPayForGood;
+                const delta = minPay - currentPay;
+                return (
+                  <div>
+                    <div className="text-xs text-[#6b7280] mb-1">Pay</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">${currentPay.toFixed(2)}</div>
+                    <div className="text-sm font-mono text-emerald-400 font-bold">+${delta.toFixed(2)}</div>
+                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-emerald-400">
+                      ${minPay.toFixed(2)}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </section>
         )}
@@ -534,13 +558,6 @@ export default function Home() {
                 total={results.evaluation.totalMinutes}
                 color="bg-rose-500"
               />
-            </div>
-
-            <div className="pt-3 border-t border-[#1e2028] flex justify-between items-center">
-              <span className="text-sm text-[#6b7280]">Required pay</span>
-              <span className="text-lg font-mono font-bold text-[#e8e9eb]">
-                ${results.evaluation.requiredPay.toFixed(2)}
-              </span>
             </div>
           </section>
         )}
