@@ -183,10 +183,20 @@ export default function Home() {
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
+      log('Stopping...');
+      // On iOS, request data before stopping to try to capture what was recorded
+      if (mediaRecorderRef.current.state === 'recording') {
+        try {
+          log('Requesting data...');
+          mediaRecorderRef.current.requestData();
+        } catch (e) {
+          log('requestData failed');
+        }
+      }
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
-  }, [isRecording]);
+  }, [isRecording, log]);
 
   // Handle file input for iOS fallback
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
