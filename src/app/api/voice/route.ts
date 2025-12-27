@@ -35,20 +35,11 @@ export async function POST(request: Request) {
       return Response.json({ error: 'No audio provided' }, { status: 400 });
     }
 
-    // Convert base64 data URI to a File and upload to FAL storage
-    const base64Data = audio.split(',')[1];
-    const mimeType = audio.split(';')[0].split(':')[1] || 'audio/webm';
-    const buffer = Buffer.from(base64Data, 'base64');
-    const blob = new Blob([buffer], { type: mimeType });
-    const file = new File([blob], 'audio.webm', { type: mimeType });
-
-    // Upload to FAL storage to get a proper URL
-    const audioUrl = await fal.storage.upload(file);
-
     // Use openrouter/router/audio to transcribe and parse in one call
+    // FAL supports base64 data URIs directly
     const result = await fal.subscribe('openrouter/router/audio', {
       input: {
-        audio_url: audioUrl,
+        audio_url: audio,
         prompt: `Extract delivery offer details from this audio. Return ONLY a JSON object with these fields (only include fields mentioned): pay (number), pickups (integer), drops (integer), miles (number), items (integer).`,
         system_prompt: SYSTEM_PROMPT,
         model: 'google/gemini-2.0-flash-001',
@@ -78,8 +69,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Voice API error:', error);
+    // Log more details if available
+    if (error && typeof error === 'object' && 'body' in error) {
+      console.error('Error body:', JSON.stringify((error as { body: unknown }).body, null, 2));
+    }
     return Response.json({
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      details: error && typeof error === 'object' && 'body' in error ? (error as { body: unknown }).body : undefined
     }, { status: 500 });
   }
 }
