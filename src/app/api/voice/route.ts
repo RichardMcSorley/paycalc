@@ -35,10 +35,20 @@ export async function POST(request: Request) {
       return Response.json({ error: 'No audio provided' }, { status: 400 });
     }
 
+    // Convert base64 data URI to a File and upload to FAL storage
+    const base64Data = audio.split(',')[1];
+    const mimeType = audio.split(';')[0].split(':')[1] || 'audio/webm';
+    const buffer = Buffer.from(base64Data, 'base64');
+    const blob = new Blob([buffer], { type: mimeType });
+    const file = new File([blob], 'audio.webm', { type: mimeType });
+
+    // Upload to FAL storage to get a proper URL
+    const audioUrl = await fal.storage.upload(file);
+
     // Use openrouter/router/audio to transcribe and parse in one call
     const result = await fal.subscribe('openrouter/router/audio', {
       input: {
-        audio_url: audio,
+        audio_url: audioUrl,
         prompt: `Extract delivery offer details from this audio. Return ONLY a JSON object with these fields (only include fields mentioned): pay (number), pickups (integer), drops (integer), miles (number), items (integer).`,
         system_prompt: SYSTEM_PROMPT,
         model: 'google/gemini-2.0-flash-001',
