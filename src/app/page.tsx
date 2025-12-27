@@ -424,6 +424,73 @@ export default function Home() {
           </section>
         )}
 
+        {/* Thresholds Card - show when not GOOD */}
+        {hasOffer && results && hasRoute && results.verdict !== 'good' && (
+          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4">
+            <div className={`grid ${parseInt(items) > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-4 text-center`}>
+              {/* Miles */}
+              {(() => {
+                const currentMiles = parseFloat(miles) || 0;
+                const maxMiles = results.evaluation.thresholds.maxMilesForGood || 0;
+                const delta = currentMiles - maxMiles;
+                const canBeGood = results.evaluation.thresholds.canBeGood;
+                return (
+                  <div>
+                    <div className="text-xs text-[#6b7280] mb-1">Miles</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">{currentMiles.toFixed(1)}</div>
+                    {canBeGood && (
+                      <div className="text-sm font-mono text-red-400 font-bold">−{delta.toFixed(1)}</div>
+                    )}
+                    <div className={`text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 ${canBeGood ? 'text-emerald-400' : 'text-[#6b7280]'}`}>
+                      {canBeGood ? maxMiles.toFixed(1) : 'N/A'}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Time */}
+              {(() => {
+                const currentTime = results.evaluation.totalMinutes;
+                const maxTime = results.evaluation.thresholds.maxTimeForGood || 0;
+                const delta = currentTime - maxTime;
+                const canBeGood = results.evaluation.thresholds.canBeGood;
+                return (
+                  <div>
+                    <div className="text-xs text-[#6b7280] mb-1">Time</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">{currentTime.toFixed(0)}m</div>
+                    {canBeGood && (
+                      <div className="text-sm font-mono text-red-400 font-bold">−{delta.toFixed(0)}</div>
+                    )}
+                    <div className={`text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 ${canBeGood ? 'text-emerald-400' : 'text-[#6b7280]'}`}>
+                      {canBeGood ? `${maxTime.toFixed(0)}m` : 'N/A'}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Items - only show if there are items */}
+              {parseInt(items) > 0 && (() => {
+                const currentItems = parseInt(items) || 0;
+                const maxItems = results.evaluation.thresholds.maxItemsForGood || 0;
+                const delta = currentItems - maxItems;
+                const canBeGood = results.evaluation.thresholds.canBeGood;
+                return (
+                  <div>
+                    <div className="text-xs text-[#6b7280] mb-1">Items</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">{currentItems}</div>
+                    {canBeGood && (
+                      <div className="text-sm font-mono text-red-400 font-bold">−{delta}</div>
+                    )}
+                    <div className={`text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 ${canBeGood ? 'text-emerald-400' : 'text-[#6b7280]'}`}>
+                      {canBeGood ? maxItems : 'N/A'}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </section>
+        )}
+
         {/* Breakdown */}
         {hasOffer && results && hasRoute && (
           <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-3">
@@ -478,32 +545,6 @@ export default function Home() {
           </section>
         )}
 
-        {/* Limits */}
-        {hasOffer && results && (
-          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4">
-            <h2 className="text-sm font-medium text-[#9ca3af] mb-3">Maximums for ${pay}</h2>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <div className="text-2xl font-bold font-mono text-[#e8e9eb]">
-                  {results.evaluation.maxMiles.toFixed(1)}
-                </div>
-                <div className="text-xs text-[#6b7280]">max miles</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold font-mono text-[#e8e9eb]">
-                  {results.evaluation.maxItems}
-                </div>
-                <div className="text-xs text-[#6b7280]">max items</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold font-mono text-[#e8e9eb]">
-                  {results.evaluation.maxMinutes.toFixed(0)}
-                </div>
-                <div className="text-xs text-[#6b7280]">min budget</div>
-              </div>
-            </div>
-          </section>
-        )}
       </main>
 
       {/* Image Lightbox */}

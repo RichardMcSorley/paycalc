@@ -145,6 +145,21 @@ export interface OfferEvaluation {
   maxItems: number;
   maxMinutes: number;
 
+  // Thresholds - max values to achieve each verdict
+  thresholds: {
+    // Miles (given current pay, pickups, drops, items)
+    maxMilesForDecent: number;
+    maxMilesForGood: number | null;
+    // Time (given current pay)
+    maxTimeForDecent: number;
+    maxTimeForGood: number | null;
+    // Items (given current pay, pickups, drops, miles)
+    maxItemsForDecent: number;
+    maxItemsForGood: number | null;
+    // Whether GOOD is achievable
+    canBeGood: boolean;
+  };
+
   // Time breakdown
   breakdown: {
     pickup: number;
@@ -164,10 +179,10 @@ export function evaluateOffer(
 ): OfferEvaluation {
   const { pay, pickups = 1, drops = 1, miles = 0, items = 0 } = input;
 
-  // Calculate maxes
+  // Calculate maxes (theoretical max with no shopping)
   const maxes = calculateMaxes({ pay, pickups, drops }, settings);
 
-  // Calculate pay required
+  // Calculate pay required for current inputs
   const payReq = calculatePayReq({ pickups, drops, miles, items }, settings);
 
   // Calculate effective hourly
@@ -198,6 +213,43 @@ export function evaluateOffer(
 
   const difference = Math.round((pay - payReq.payReq) * 100) / 100;
 
+  // Calculate thresholds - max miles for DECENT and GOOD given current pay, pickups, drops, items
+  const { perPickup, perDrop, perItem, avgSpeed, expectedPay, maxOrdersPerHour, return1Drop, return2Drop } = settings;
+  const returnPercent = drops >= 2 ? return2Drop : return1Drop;
+  const travelMultiplier = 1 + (returnPercent / 100);
+
+  // Fixed time (non-travel time)
+  const fixedTime = (pickups * perPickup) + (drops * perDrop) + (items * perItem);
+
+  // Max minutes for this pay
+  const maxMins = (pay / expectedPay) * 60;
+
+  // Can this offer ever be GOOD?
+  // GOOD requires effectiveHourly >= expectedPay
+  // At best (shortest trip), effectiveHourly = pay * maxOrdersPerHour
+  const canBeGood = pay * maxOrdersPerHour >= expectedPay;
+
+  // TIME THRESHOLDS
+  // Max time for DECENT/GOOD is simply maxMins
+  const maxTimeForDecent = Math.round(maxMins * 10) / 10;
+  const maxTimeForGood = canBeGood ? maxTimeForDecent : null;
+
+  // MILES THRESHOLDS (given current pickups, drops, items)
+  // Max miles for DECENT: totalMins <= maxMins
+  const availableTimeForTravel = maxMins - fixedTime;
+  const maxTravelTime = availableTimeForTravel / travelMultiplier;
+  const maxMilesForDecent = Math.max(0, Math.round((maxTravelTime * avgSpeed / 60) * 10) / 10);
+  const maxMilesForGood = canBeGood ? maxMilesForDecent : null;
+
+  // ITEMS THRESHOLDS (given current pickups, drops, miles)
+  // Fixed time without items
+  const travelTime = (miles / avgSpeed) * 60;
+  const returnTime = travelTime * (returnPercent / 100);
+  const fixedTimeWithoutItems = (pickups * perPickup) + (drops * perDrop) + travelTime + returnTime;
+  const availableTimeForItems = maxMins - fixedTimeWithoutItems;
+  const maxItemsForDecent = Math.max(0, Math.floor(availableTimeForItems / perItem));
+  const maxItemsForGood = canBeGood ? maxItemsForDecent : null;
+
   // Build summary
   let summary: string;
   if (miles > 0) {
@@ -217,6 +269,15 @@ export function evaluateOffer(
     maxMiles: maxes.maxMiles,
     maxItems: maxes.maxItems,
     maxMinutes: maxes.maxMins,
+    thresholds: {
+      maxMilesForDecent,
+      maxMilesForGood,
+      maxTimeForDecent,
+      maxTimeForGood,
+      maxItemsForDecent,
+      maxItemsForGood,
+      canBeGood
+    },
     breakdown: {
       pickup: payReq.pickupTime,
       travel: payReq.travelTime,
