@@ -1,5 +1,6 @@
 import { fal } from '@fal-ai/client';
 import { headers } from 'next/headers';
+import { evaluateOffer, DEFAULT_SETTINGS } from '@/lib/calculations';
 
 fal.config({
   credentials: process.env.FAL_KEY,
@@ -23,13 +24,22 @@ export async function GET() {
     usage: 'POST an image to this endpoint',
     method: 'POST',
     body: {
-      image: 'base64 data URI (e.g., data:image/png;base64,...)'
+      image: 'base64 string or data URI'
     },
     response: {
       parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number' },
+      evaluation: {
+        verdict: 'good | decent | bad',
+        verdictEmoji: '🟢 | 🟡 | 🔴',
+        effectiveHourly: 'number',
+        requiredPay: 'number',
+        maxMiles: 'number',
+        summary: 'Human readable summary'
+      },
+      summary: 'Quick summary for display (e.g., "🟢 GOOD: $25/hr effective")',
       url: 'https://paycalc.app/?pay=X&miles=Y&...'
     },
-    example: 'curl -X POST -H "Content-Type: application/json" -d \'{"image":"data:image/png;base64,..."}\' https://yourapp/api/vision'
+    tip: 'Use the "summary" field to display results in iOS Shortcuts'
   }, { headers: corsHeaders });
 }
 
@@ -128,9 +138,22 @@ export async function POST(request: Request) {
 
     const url = `${protocol}://${host}/?${params.toString()}`;
 
+    // Evaluate the offer if we have pay
+    let evaluation = null;
+    if (parsed.pay !== undefined && parsed.pay > 0) {
+      evaluation = evaluateOffer({
+        pay: parsed.pay,
+        pickups: parsed.pickups,
+        drops: parsed.drops,
+        miles: parsed.miles,
+        items: parsed.items
+      }, DEFAULT_SETTINGS);
+    }
+
     return Response.json({
-      raw: output,
       parsed,
+      evaluation,
+      summary: evaluation?.summary || 'Could not evaluate offer',
       url,
     }, { headers: corsHeaders });
   } catch (error) {

@@ -2,8 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
-  calculateMaxes,
-  calculatePayReq,
+  evaluateOffer,
   DEFAULT_SETTINGS,
   type CalculationSettings
 } from '@/lib/calculations';
@@ -121,7 +120,7 @@ export default function Home() {
     localStorage.setItem('paycalc-settings', JSON.stringify(newSettings));
   };
 
-  // Calculations
+  // Calculations using shared evaluateOffer function
   const results = useMemo(() => {
     const payNum = parseFloat(pay) || 0;
     const pickupsNum = parseInt(pickups) || 1;
@@ -133,37 +132,15 @@ export default function Home() {
       return null;
     }
 
-    const maxes = calculateMaxes(
-      { pay: payNum, pickups: pickupsNum, drops: dropsNum },
+    const evaluation = evaluateOffer(
+      { pay: payNum, pickups: pickupsNum, drops: dropsNum, miles: milesNum, items: itemsNum },
       settings
     );
-
-    const payReq = calculatePayReq(
-      { pickups: pickupsNum, drops: dropsNum, miles: milesNum, items: itemsNum },
-      settings
-    );
-
-    const meetsRequired = payNum >= payReq.payReq;
-    // Cap effective hourly by max orders per hour
-    const ordersPerHour = payReq.totalMins > 0
-      ? Math.min(settings.maxOrdersPerHour, 60 / payReq.totalMins)
-      : 0;
-    const effectiveHourly = payNum * ordersPerHour;
-
-    // GOOD: meets required AND effective hourly >= target
-    // DECENT: meets required BUT effective hourly < target
-    // BAD: doesn't meet required
-    const verdict: 'good' | 'decent' | 'bad' = !meetsRequired
-      ? 'bad'
-      : effectiveHourly >= settings.expectedPay
-        ? 'good'
-        : 'decent';
 
     return {
-      maxes,
-      payReq,
-      verdict,
-      effectiveHourly: Math.round(effectiveHourly * 100) / 100
+      evaluation,
+      verdict: evaluation.verdict,
+      effectiveHourly: evaluation.effectiveHourly
     };
   }, [pay, pickups, drops, miles, items, settings]);
 
@@ -437,10 +414,10 @@ export default function Home() {
             ) : (
               <>
                 <div className="text-2xl font-bold text-[#e8e9eb] mb-1">
-                  Max {results.maxes.maxMiles.toFixed(1)} mi
+                  Max {results.evaluation.maxMiles.toFixed(1)} mi
                 </div>
                 <div className="text-sm text-[#6b7280]">
-                  for ${pay} at {results.maxes.maxMins.toFixed(0)} min budget
+                  for ${pay} at {results.evaluation.maxMinutes.toFixed(0)} min budget
                 </div>
               </>
             )}
@@ -453,41 +430,41 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-[#9ca3af]">Time Breakdown</h2>
               <span className="text-sm font-mono text-[#e8e9eb]">
-                {results.payReq.totalMins.toFixed(1)} min total
+                {results.evaluation.totalMinutes.toFixed(1)} min total
               </span>
             </div>
 
             <div className="space-y-2">
               <TimeBar
                 label="Pickup"
-                value={results.payReq.pickupTime}
-                total={results.payReq.totalMins}
+                value={results.evaluation.breakdown.pickup}
+                total={results.evaluation.totalMinutes}
                 color="bg-blue-500"
               />
               <TimeBar
                 label="Travel"
-                value={results.payReq.travelTime}
-                total={results.payReq.totalMins}
+                value={results.evaluation.breakdown.travel}
+                total={results.evaluation.totalMinutes}
                 color="bg-purple-500"
               />
               <TimeBar
                 label="Drop"
-                value={results.payReq.dropTime}
-                total={results.payReq.totalMins}
+                value={results.evaluation.breakdown.drop}
+                total={results.evaluation.totalMinutes}
                 color="bg-cyan-500"
               />
-              {results.payReq.shoppingTime > 0 && (
+              {results.evaluation.breakdown.shopping > 0 && (
                 <TimeBar
                   label="Shopping"
-                  value={results.payReq.shoppingTime}
-                  total={results.payReq.totalMins}
+                  value={results.evaluation.breakdown.shopping}
+                  total={results.evaluation.totalMinutes}
                   color="bg-amber-500"
                 />
               )}
               <TimeBar
                 label="Return"
-                value={results.payReq.returnDelta}
-                total={results.payReq.totalMins}
+                value={results.evaluation.breakdown.return}
+                total={results.evaluation.totalMinutes}
                 color="bg-rose-500"
               />
             </div>
@@ -495,7 +472,7 @@ export default function Home() {
             <div className="pt-3 border-t border-[#1e2028] flex justify-between items-center">
               <span className="text-sm text-[#6b7280]">Required pay</span>
               <span className="text-lg font-mono font-bold text-[#e8e9eb]">
-                ${results.payReq.payReq.toFixed(2)}
+                ${results.evaluation.requiredPay.toFixed(2)}
               </span>
             </div>
           </section>

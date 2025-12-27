@@ -116,3 +116,114 @@ export function calculatePayReq(
     payReq: Math.round(payReq * 100) / 100
   };
 }
+
+// Full offer evaluation
+export interface OfferInput {
+  pay: number;
+  pickups?: number;
+  drops?: number;
+  miles?: number;
+  items?: number;
+}
+
+export type Verdict = 'good' | 'decent' | 'bad';
+
+export interface OfferEvaluation {
+  // Verdict
+  verdict: Verdict;
+  verdictEmoji: string;
+  verdictText: string;
+
+  // Key metrics
+  effectiveHourly: number;
+  requiredPay: number;
+  difference: number;
+  totalMinutes: number;
+
+  // Limits (when no miles provided)
+  maxMiles: number;
+  maxItems: number;
+  maxMinutes: number;
+
+  // Time breakdown
+  breakdown: {
+    pickup: number;
+    travel: number;
+    drop: number;
+    shopping: number;
+    return: number;
+  };
+
+  // Summary for display
+  summary: string;
+}
+
+export function evaluateOffer(
+  input: OfferInput,
+  settings: CalculationSettings = DEFAULT_SETTINGS
+): OfferEvaluation {
+  const { pay, pickups = 1, drops = 1, miles = 0, items = 0 } = input;
+
+  // Calculate maxes
+  const maxes = calculateMaxes({ pay, pickups, drops }, settings);
+
+  // Calculate pay required
+  const payReq = calculatePayReq({ pickups, drops, miles, items }, settings);
+
+  // Calculate effective hourly
+  const ordersPerHour = payReq.totalMins > 0
+    ? Math.min(settings.maxOrdersPerHour, 60 / payReq.totalMins)
+    : 0;
+  const effectiveHourly = Math.round(pay * ordersPerHour * 100) / 100;
+
+  // Determine verdict
+  const meetsRequired = pay >= payReq.payReq;
+  let verdict: Verdict;
+  let verdictEmoji: string;
+  let verdictText: string;
+
+  if (!meetsRequired) {
+    verdict = 'bad';
+    verdictEmoji = '🔴';
+    verdictText = 'BAD';
+  } else if (effectiveHourly >= settings.expectedPay) {
+    verdict = 'good';
+    verdictEmoji = '🟢';
+    verdictText = 'GOOD';
+  } else {
+    verdict = 'decent';
+    verdictEmoji = '🟡';
+    verdictText = 'DECENT';
+  }
+
+  const difference = Math.round((pay - payReq.payReq) * 100) / 100;
+
+  // Build summary
+  let summary: string;
+  if (miles > 0) {
+    summary = `${verdictEmoji} ${verdictText}: $${effectiveHourly}/hr effective | ${payReq.totalMins.toFixed(1)} min | ${difference >= 0 ? '+' : ''}$${difference.toFixed(2)} vs required`;
+  } else {
+    summary = `${verdictEmoji} $${pay} = Max ${maxes.maxMiles.toFixed(1)} mi in ${maxes.maxMins.toFixed(0)} min`;
+  }
+
+  return {
+    verdict,
+    verdictEmoji,
+    verdictText,
+    effectiveHourly,
+    requiredPay: payReq.payReq,
+    difference,
+    totalMinutes: payReq.totalMins,
+    maxMiles: maxes.maxMiles,
+    maxItems: maxes.maxItems,
+    maxMinutes: maxes.maxMins,
+    breakdown: {
+      pickup: payReq.pickupTime,
+      travel: payReq.travelTime,
+      drop: payReq.dropTime,
+      shopping: payReq.shoppingTime,
+      return: payReq.returnDelta
+    },
+    summary
+  };
+}
