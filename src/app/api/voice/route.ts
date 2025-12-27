@@ -35,14 +35,34 @@ export async function POST(request: Request) {
       return Response.json({ error: 'No audio provided' }, { status: 400 });
     }
 
+    // Convert base64 data URI to a File with proper extension
+    const base64Data = audio.split(',')[1];
+    const mimeType = audio.split(';')[0].split(':')[1] || 'audio/mp4';
+
+    // Map mime type to file extension
+    const extMap: Record<string, string> = {
+      'audio/mp4': 'mp4',
+      'audio/m4a': 'm4a',
+      'audio/aac': 'aac',
+      'audio/ogg': 'ogg',
+      'audio/wav': 'wav',
+      'audio/webm': 'webm',
+      'audio/mpeg': 'mp3',
+    };
+    const ext = extMap[mimeType] || 'mp4';
+
+    // Upload with proper filename so FAL can detect format
+    const buffer = Buffer.from(base64Data, 'base64');
+    const file = new File([buffer], `audio.${ext}`, { type: mimeType });
+    const audioUrl = await fal.storage.upload(file);
+
     // Use openrouter/router/audio to transcribe and parse in one call
-    // FAL supports base64 data URIs directly
     const result = await fal.subscribe('openrouter/router/audio', {
       input: {
-        audio_url: audio,
+        audio_url: audioUrl,
         prompt: `Extract delivery offer details from this audio. Return ONLY a JSON object with these fields (only include fields mentioned): pay (number), pickups (integer), drops (integer), miles (number), items (integer).`,
         system_prompt: SYSTEM_PROMPT,
-        model: 'google/gemini-2.0-flash-001',
+        model: 'google/gemini-3-flash-preview',
       },
     });
 
