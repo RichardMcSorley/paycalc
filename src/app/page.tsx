@@ -25,9 +25,16 @@ export default function Home() {
   const [isPreparing, setIsPreparing] = useState(false); // Show immediately when mic clicked
   const [isProcessing, setIsProcessing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Debug logger for iOS
+  const log = useCallback((msg: string) => {
+    console.log(msg);
+    setDebugLog(prev => [...prev.slice(-9), msg]); // Keep last 10 messages
+  }, []);
 
   // Detect iOS - we'll still try MediaRecorder but with iOS-specific handling
   const isIOS = typeof navigator !== 'undefined' &&
@@ -100,27 +107,39 @@ export default function Home() {
       }
       // If nothing is explicitly supported, let the browser choose (iOS Safari fallback)
 
-      console.log('Creating MediaRecorder with mimeType:', mimeType || 'browser default');
+      log('Creating recorder: ' + (mimeType || 'default'));
       const mediaRecorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
       // Get the actual mimeType the recorder is using
       const actualMimeType = mediaRecorder.mimeType || mimeType || 'audio/mp4';
-      console.log('MediaRecorder actual mimeType:', actualMimeType);
+      log('Actual mimeType: ' + actualMimeType);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
       mediaRecorder.ondataavailable = (e) => {
+        log('Data chunk: ' + e.data.size + ' bytes');
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
         }
       };
 
+      mediaRecorder.onerror = (e) => {
+        log('ERROR: ' + (e as ErrorEvent).message);
+        setVoiceError('Recording failed');
+        setIsRecording(false);
+        setIsPreparing(false);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.onstart = () => {
+        log('Started, state: ' + mediaRecorder.state);
+      };
+
       mediaRecorder.onstop = () => {
-        console.log('Recording stopped, chunks:', chunksRef.current.length);
-        console.log('Chunk sizes:', chunksRef.current.map(c => c.size));
+        log('Stopped, chunks: ' + chunksRef.current.length);
         // Use the recorder's actual mimeType
         const blobType = mediaRecorder.mimeType || actualMimeType;
         const audioBlob = new Blob(chunksRef.current, { type: blobType });
-        console.log('Audio blob size:', audioBlob.size, 'type:', audioBlob.type);
+        log('Blob: ' + audioBlob.size + ' bytes, ' + blobType);
         stream.getTracks().forEach(track => track.stop());
         if (audioBlob.size === 0) {
           setVoiceError('No audio recorded - try speaking while the button is red');
@@ -134,11 +153,11 @@ export default function Home() {
       // Data will be available when stop() is called
       if (isIOS) {
         mediaRecorder.start();
-        console.log('Recording started (iOS mode, no timeslice), mimeType:', mediaRecorder.mimeType || actualMimeType);
+        log('start() called (iOS mode)');
       } else {
         // Use timeslice on other platforms for progressive data capture
         mediaRecorder.start(100);
-        console.log('Recording started (timeslice 100ms), mimeType:', mediaRecorder.mimeType || actualMimeType);
+        log('start() called (timeslice 100ms)');
       }
       setIsPreparing(false);
       setIsRecording(true);
@@ -160,7 +179,7 @@ export default function Home() {
         }
       }
     }
-  }, [processVoice, isIOS]);
+  }, [processVoice, isIOS, log]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
@@ -327,6 +346,21 @@ export default function Home() {
           <div className="bg-red-950/50 border border-red-500/50 text-red-400 px-4 py-2 rounded-xl text-sm flex items-center justify-between">
             <span>{voiceError}</span>
             <button onClick={() => setVoiceError(null)} className="ml-2 hover:text-red-300">×</button>
+          </div>
+        </div>
+      )}
+
+      {/* Debug log panel */}
+      {debugLog.length > 0 && (
+        <div className="max-w-lg mx-auto px-4 pt-4">
+          <div className="bg-[#1a1b1e] border border-[#2a2d38] rounded-xl p-3 font-mono text-xs text-[#9ca3af] space-y-1">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-[#6b7280]">Debug Log</span>
+              <button onClick={() => setDebugLog([])} className="text-[#6b7280] hover:text-white">clear</button>
+            </div>
+            {debugLog.map((msg, i) => (
+              <div key={i} className={msg.includes('ERROR') ? 'text-red-400' : ''}>{msg}</div>
+            ))}
           </div>
         </div>
       )}
