@@ -1,0 +1,137 @@
+import { fal } from '@fal-ai/client';
+import { headers } from 'next/headers';
+
+fal.config({
+  credentials: process.env.FAL_KEY,
+});
+
+// CORS headers for external access
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+// Handle preflight requests
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: corsHeaders });
+}
+
+// GET handler - return usage info
+export async function GET() {
+  return Response.json({
+    usage: 'POST an image to this endpoint',
+    method: 'POST',
+    body: {
+      image: 'base64 data URI (e.g., data:image/png;base64,...)'
+    },
+    response: {
+      parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number' },
+      url: 'https://paycalc.app/?pay=X&miles=Y&...'
+    },
+    example: 'curl -X POST -H "Content-Type: application/json" -d \'{"image":"data:image/png;base64,..."}\' https://yourapp/api/vision'
+  }, { headers: corsHeaders });
+}
+
+const SYSTEM_PROMPT = `You are a vision assistant for a delivery gig pay calculator.
+Look at the screenshot of a delivery offer and extract the following fields:
+
+SCHEMA:
+- pay: The dollar amount offered (number, e.g., 8.50)
+- pickups: Number of pickup locations (integer, 1-10, default 1)
+- drops: Number of drop-off locations (integer, 1-10, default 1)
+- miles: Total distance in miles (number, 0-100)
+- items: Number of items to shop for (integer, 0-100, default 0)
+
+RULES:
+- Look for dollar amounts, distances, store counts, drop-off counts
+- "Shop & Deliver" or item counts indicate shopping orders
+- Multiple store pickups or customer drop-offs should be counted
+- Only include fields you can clearly identify
+- Return ONLY valid JSON, no explanation`;
+
+export async function POST(request: Request) {
+  try {
+    const { image } = await request.json();
+
+    if (!image) {
+      return Response.json({ error: 'No image provided' }, { status: 400, headers: corsHeaders });
+    }
+
+    // Convert base64 data URI to a File with proper extension
+    const base64Data = image.split(',')[1];
+    const mimeType = image.split(';')[0].split(':')[1] || 'image/png';
+
+    // Map mime type to file extension
+    const extMap: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+    };
+    const ext = extMap[mimeType] || 'png';
+
+    // Upload with proper filename so FAL can detect format
+    const buffer = Buffer.from(base64Data, 'base64');
+    const file = new File([buffer], `screenshot.${ext}`, { type: mimeType });
+    const imageUrl = await fal.storage.upload(file);
+
+    // Use openrouter/router/vision to analyze the screenshot
+    const result = await fal.subscribe('openrouter/router/vision', {
+      input: {
+        image_urls: [imageUrl],
+        prompt: `Extract delivery offer details from this screenshot. Return ONLY a JSON object with these fields (only include fields you can identify): pay (number), pickups (integer), drops (integer), miles (number), items (integer).`,
+        system_prompt: SYSTEM_PROMPT,
+        model: 'google/gemini-3-flash-preview',
+      },
+    });
+
+    const output = (result.data as { output?: string })?.output || '';
+
+    // Try to extract JSON from the response
+    let parsed: Record<string, number> = {};
+    try {
+      // Find JSON in the response
+      const jsonMatch = output.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      return Response.json({
+        raw: output,
+        error: 'Could not parse response'
+      }, { headers: corsHeaders });
+    }
+
+    // Build URL with parsed parameters
+    const headersList = await headers();
+    const host = headersList.get('host') || 'localhost:3000';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+
+    const params = new URLSearchParams();
+    if (parsed.pay !== undefined) params.set('pay', String(parsed.pay));
+    if (parsed.pickups !== undefined) params.set('pickups', String(parsed.pickups));
+    if (parsed.drops !== undefined) params.set('drops', String(parsed.drops));
+    if (parsed.miles !== undefined) params.set('miles', String(parsed.miles));
+    if (parsed.items !== undefined) params.set('items', String(parsed.items));
+
+    const url = `${protocol}://${host}/?${params.toString()}`;
+
+    return Response.json({
+      raw: output,
+      parsed,
+      url,
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('Vision API error:', error);
+    // Log more details if available
+    if (error && typeof error === 'object' && 'body' in error) {
+      console.error('Error body:', JSON.stringify((error as { body: unknown }).body, null, 2));
+    }
+    return Response.json({
+      error: error instanceof Error ? error.message : 'Unknown error',
+      details: error && typeof error === 'object' && 'body' in error ? (error as { body: unknown }).body : undefined
+    }, { status: 500, headers: corsHeaders });
+  }
+}
