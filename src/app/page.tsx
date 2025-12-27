@@ -29,7 +29,7 @@ export default function Home() {
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Detect iOS for file input fallback (MediaRecorder is unreliable on iOS Safari)
+  // Detect iOS - we'll still try MediaRecorder but with iOS-specific handling
   const isIOS = typeof navigator !== 'undefined' &&
     /iPad|iPhone|iPod/.test(navigator.userAgent);
 
@@ -130,9 +130,16 @@ export default function Home() {
         processVoice(audioBlob);
       };
 
-      // Use timeslice to capture data every 100ms (ensures we get data even for short recordings)
-      mediaRecorder.start(100);
-      console.log('Recording started, mimeType:', mediaRecorder.mimeType || actualMimeType);
+      // Start recording - don't use timeslice on iOS as it's unreliable
+      // Data will be available when stop() is called
+      if (isIOS) {
+        mediaRecorder.start();
+        console.log('Recording started (iOS mode, no timeslice), mimeType:', mediaRecorder.mimeType || actualMimeType);
+      } else {
+        // Use timeslice on other platforms for progressive data capture
+        mediaRecorder.start(100);
+        console.log('Recording started (timeslice 100ms), mimeType:', mediaRecorder.mimeType || actualMimeType);
+      }
       setIsPreparing(false);
       setIsRecording(true);
     } catch (error) {
@@ -153,7 +160,7 @@ export default function Home() {
         }
       }
     }
-  }, [processVoice]);
+  }, [processVoice, isIOS]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
@@ -173,17 +180,14 @@ export default function Home() {
     e.target.value = '';
   }, [processVoice]);
 
-  // Trigger recording - uses file input on iOS, MediaRecorder elsewhere
+  // Trigger recording
   const handleMicClick = useCallback(() => {
     if (isRecording) {
       stopRecording();
-    } else if (isIOS) {
-      // On iOS, trigger the native file picker with audio capture
-      fileInputRef.current?.click();
     } else {
       startRecording();
     }
-  }, [isRecording, isIOS, stopRecording, startRecording]);
+  }, [isRecording, stopRecording, startRecording]);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -266,12 +270,11 @@ export default function Home() {
             <h1 className="text-lg font-semibold tracking-tight">PayCalc</h1>
           </div>
           <div className="flex items-center gap-1">
-          {/* Hidden file input for iOS audio capture */}
+          {/* Hidden file input for iOS audio capture - no capture attr to show file picker */}
           <input
             ref={fileInputRef}
             type="file"
             accept="audio/*"
-            capture="user"
             onChange={handleFileInput}
             className="hidden"
           />
