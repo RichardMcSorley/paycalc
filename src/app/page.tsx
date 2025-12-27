@@ -20,40 +20,29 @@ export default function Home() {
   const [settings, setSettings] = useState<CalculationSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Voice input
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPreparing, setIsPreparing] = useState(false); // Show immediately when mic clicked
+  // Image input
   const [isProcessing, setIsProcessing] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [debugLog, setDebugLog] = useState<string[]>([]);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [showLightbox, setShowLightbox] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Debug logger for iOS
-  const log = useCallback((msg: string) => {
-    console.log(msg);
-    setDebugLog(prev => [...prev.slice(-9), msg]); // Keep last 10 messages
-  }, []);
-
-  // Detect iOS - we'll still try MediaRecorder but with iOS-specific handling
-  const isIOS = typeof navigator !== 'undefined' &&
-    /iPad|iPhone|iPod/.test(navigator.userAgent);
-
-  const processVoice = useCallback(async (audioBlob: Blob) => {
+  const processImage = useCallback(async (imageFile: File) => {
     setIsProcessing(true);
     try {
-      // Convert blob to base64 data URI
+      // Convert to base64 data URI
       const reader = new FileReader();
       const base64 = await new Promise<string>((resolve) => {
         reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(audioBlob);
+        reader.readAsDataURL(imageFile);
       });
 
-      const response = await fetch('/api/voice', {
+      // Store the image for preview
+      setUploadedImage(base64);
+
+      const response = await fetch('/api/vision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio: base64 }),
+        body: JSON.stringify({ image: base64 }),
       });
 
       const data = await response.json();
@@ -77,146 +66,20 @@ export default function Home() {
         }
       }
     } catch (error) {
-      console.error('Voice processing error:', error);
+      console.error('Image processing error:', error);
     } finally {
       setIsProcessing(false);
     }
   }, []);
 
-  const startRecording = useCallback(async () => {
-    setVoiceError(null);
-    setIsPreparing(true); // Show feedback immediately
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // Try to use a format supported by FAL (mp4/aac, ogg, or wav)
-      // Safari supports mp4, Chrome/Firefox support ogg/webm
-      let mimeType: string | undefined;
-      let options: MediaRecorderOptions | undefined;
-
-      // Check supported formats in order of preference for FAL compatibility
-      if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        mimeType = 'audio/mp4';
-        options = { mimeType };
-      } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
-        mimeType = 'audio/ogg';
-        options = { mimeType };
-      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-        mimeType = 'audio/webm';
-        options = { mimeType };
-      }
-      // If nothing is explicitly supported, let the browser choose (iOS Safari fallback)
-
-      log('Creating recorder: ' + (mimeType || 'default'));
-      const mediaRecorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
-      // Get the actual mimeType the recorder is using
-      const actualMimeType = mediaRecorder.mimeType || mimeType || 'audio/mp4';
-      log('Actual mimeType: ' + actualMimeType);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        log('Data chunk: ' + e.data.size + ' bytes');
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onerror = (e) => {
-        log('ERROR: ' + (e as ErrorEvent).message);
-        setVoiceError('Recording failed');
-        setIsRecording(false);
-        setIsPreparing(false);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.onstart = () => {
-        log('Started, state: ' + mediaRecorder.state);
-      };
-
-      mediaRecorder.onstop = () => {
-        log('Stopped, chunks: ' + chunksRef.current.length);
-        // Use the recorder's actual mimeType
-        const blobType = mediaRecorder.mimeType || actualMimeType;
-        const audioBlob = new Blob(chunksRef.current, { type: blobType });
-        log('Blob: ' + audioBlob.size + ' bytes, ' + blobType);
-        stream.getTracks().forEach(track => track.stop());
-        if (audioBlob.size === 0) {
-          setVoiceError('No audio recorded - try speaking while the button is red');
-          setIsProcessing(false);
-          return;
-        }
-        processVoice(audioBlob);
-      };
-
-      // Start recording - don't use timeslice on iOS as it's unreliable
-      // Data will be available when stop() is called
-      if (isIOS) {
-        mediaRecorder.start();
-        log('start() called (iOS mode)');
-      } else {
-        // Use timeslice on other platforms for progressive data capture
-        mediaRecorder.start(100);
-        log('start() called (timeslice 100ms)');
-      }
-      setIsPreparing(false);
-      setIsRecording(true);
-    } catch (error) {
-      setIsPreparing(false);
-      console.error('Failed to start recording:', error);
-      if (error instanceof TypeError) {
-        // navigator.mediaDevices is undefined - needs HTTPS
-        setVoiceError('Microphone requires HTTPS (try Chrome on localhost)');
-      } else if (error instanceof Error) {
-        if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-          setVoiceError('No microphone found');
-        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          setVoiceError('Microphone permission denied');
-        } else if (error.name === 'NotReadableError' || error.name === 'AbortError') {
-          setVoiceError('Microphone is in use by another app');
-        } else {
-          setVoiceError(error.message);
-        }
-      }
-    }
-  }, [processVoice, isIOS, log]);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      log('Stopping...');
-      // On iOS, request data before stopping to try to capture what was recorded
-      if (mediaRecorderRef.current.state === 'recording') {
-        try {
-          log('Requesting data...');
-          mediaRecorderRef.current.requestData();
-        } catch (e) {
-          log('requestData failed');
-        }
-      }
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  }, [isRecording, log]);
-
-  // Handle file input for iOS fallback
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      console.log('File selected:', file.name, file.type, file.size);
-      processVoice(file);
+      processImage(file);
     }
     // Reset input so same file can be selected again
     e.target.value = '';
-  }, [processVoice]);
-
-  // Trigger recording
-  const handleMicClick = useCallback(() => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  }, [isRecording, stopRecording, startRecording]);
+  }, [processImage]);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -227,6 +90,28 @@ export default function Home() {
       } catch {
         // ignore
       }
+    }
+  }, []);
+
+  // Load values from URL parameters (for sharing/external API calls)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const urlPay = params.get('pay');
+    const urlPickups = params.get('pickups');
+    const urlDrops = params.get('drops');
+    const urlMiles = params.get('miles');
+    const urlItems = params.get('items');
+
+    if (urlPay) setPay(urlPay);
+    if (urlPickups) setPickups(urlPickups);
+    if (urlDrops) setDrops(urlDrops);
+    if (urlMiles) setMiles(urlMiles);
+    if (urlItems) setItems(urlItems);
+
+    // Clean URL after loading params (optional - keeps URL clean)
+    if (params.toString()) {
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -259,7 +144,6 @@ export default function Home() {
     );
 
     const meetsRequired = payNum >= payReq.payReq;
-    const difference = payNum - payReq.payReq;
     // Cap effective hourly by max orders per hour
     const ordersPerHour = payReq.totalMins > 0
       ? Math.min(settings.maxOrdersPerHour, 60 / payReq.totalMins)
@@ -279,7 +163,6 @@ export default function Home() {
       maxes,
       payReq,
       verdict,
-      difference,
       effectiveHourly: Math.round(effectiveHourly * 100) / 100
     };
   }, [pay, pickups, drops, miles, items, settings]);
@@ -299,37 +182,33 @@ export default function Home() {
             <h1 className="text-lg font-semibold tracking-tight">PayCalc</h1>
           </div>
           <div className="flex items-center gap-1">
-          {/* Hidden file input for iOS audio capture - no capture attr to show file picker */}
+          {/* Hidden file input for image/screenshot upload */}
           <input
-            ref={fileInputRef}
+            ref={imageInputRef}
             type="file"
-            accept="audio/*"
-            onChange={handleFileInput}
+            accept="image/*"
+            onChange={handleImageInput}
             className="hidden"
           />
+          {/* Camera/Screenshot button */}
           <button
-            onClick={handleMicClick}
-            disabled={isProcessing || isPreparing}
+            onClick={() => imageInputRef.current?.click()}
+            disabled={isProcessing}
             className={`p-2 rounded-lg transition-colors ${
-              isRecording
-                ? 'bg-red-500 text-white animate-pulse'
-                : isPreparing || isProcessing
-                  ? 'bg-[#1e2028] text-emerald-400'
-                  : 'text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028]'
+              isProcessing
+                ? 'bg-[#1e2028] text-emerald-400'
+                : 'text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028]'
             }`}
           >
-            {isPreparing || isProcessing ? (
+            {isProcessing ? (
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-            ) : isRecording ? (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
             ) : (
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             )}
           </button>
@@ -349,31 +228,6 @@ export default function Home() {
           </div>
         </div>
       </header>
-
-      {/* Voice error toast */}
-      {voiceError && (
-        <div className="max-w-lg mx-auto px-4 pt-4">
-          <div className="bg-red-950/50 border border-red-500/50 text-red-400 px-4 py-2 rounded-xl text-sm flex items-center justify-between">
-            <span>{voiceError}</span>
-            <button onClick={() => setVoiceError(null)} className="ml-2 hover:text-red-300">×</button>
-          </div>
-        </div>
-      )}
-
-      {/* Debug log panel */}
-      {debugLog.length > 0 && (
-        <div className="max-w-lg mx-auto px-4 pt-4">
-          <div className="bg-[#1a1b1e] border border-[#2a2d38] rounded-xl p-3 font-mono text-xs text-[#9ca3af] space-y-1">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[#6b7280]">Debug Log</span>
-              <button onClick={() => setDebugLog([])} className="text-[#6b7280] hover:text-white">clear</button>
-            </div>
-            {debugLog.map((msg, i) => (
-              <div key={i} className={msg.includes('ERROR') ? 'text-red-400' : ''}>{msg}</div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {/* Settings Panel */}
@@ -446,7 +300,25 @@ export default function Home() {
 
         {/* Offer Input */}
         <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-4">
-          <h2 className="text-sm font-medium text-[#9ca3af]">Offer Details</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-[#9ca3af]">Offer Details</h2>
+            {uploadedImage && (
+              <button
+                onClick={() => setShowLightbox(true)}
+                className="group relative flex items-center gap-2 px-2 py-1 -mr-1 rounded-lg hover:bg-[#1e2028] transition-all duration-200"
+              >
+                <span className="text-xs text-[#6b7280] group-hover:text-emerald-400 transition-colors">Source</span>
+                <div className="relative w-8 h-8 rounded-md overflow-hidden border border-[#2a2d38] group-hover:border-emerald-500/50 transition-all duration-200 group-hover:shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+                  <img
+                    src={uploadedImage}
+                    alt="Uploaded screenshot"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </button>
+            )}
+          </div>
 
           {/* Pay - Prominent */}
           <div className="flex items-center bg-[#0a0b0d] border border-[#2a2d38] rounded-xl overflow-hidden">
@@ -656,6 +528,50 @@ export default function Home() {
           </section>
         )}
       </main>
+
+      {/* Image Lightbox */}
+      {showLightbox && uploadedImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setShowLightbox(false)}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+
+          {/* Image Container */}
+          <div
+            className="relative max-w-2xl max-h-[85vh] w-full animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setShowLightbox(false)}
+              className="absolute -top-12 right-0 p-2 text-[#6b7280] hover:text-white transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Image */}
+            <div className="relative rounded-2xl overflow-hidden border border-[#2a2d38] shadow-2xl shadow-black/50">
+              <img
+                src={uploadedImage}
+                alt="Uploaded screenshot"
+                className="w-full h-auto max-h-[85vh] object-contain bg-[#0a0b0d]"
+              />
+              {/* Subtle corner accent */}
+              <div className="absolute top-0 left-0 w-16 h-16 bg-gradient-to-br from-emerald-500/10 to-transparent pointer-events-none" />
+              <div className="absolute bottom-0 right-0 w-16 h-16 bg-gradient-to-tl from-emerald-500/10 to-transparent pointer-events-none" />
+            </div>
+
+            {/* Label */}
+            <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-xs text-[#6b7280]">
+              Tap outside to close
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
