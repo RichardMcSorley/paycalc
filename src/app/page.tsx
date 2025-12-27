@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   calculateMaxes,
   calculatePayReq,
@@ -19,6 +19,104 @@ export default function Home() {
   // Settings
   const [settings, setSettings] = useState<CalculationSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Voice input
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const processVoice = useCallback(async (audioBlob: Blob) => {
+    setIsProcessing(true);
+    try {
+      // Convert blob to base64 data URI
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(audioBlob);
+      });
+
+      const response = await fetch('/api/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio: base64 }),
+      });
+
+      const data = await response.json();
+
+      if (data.parsed) {
+        // Update form fields with parsed data
+        if (data.parsed.pay !== undefined) {
+          setPay(String(data.parsed.pay));
+        }
+        if (data.parsed.pickups !== undefined) {
+          setPickups(String(data.parsed.pickups));
+        }
+        if (data.parsed.drops !== undefined) {
+          setDrops(String(data.parsed.drops));
+        }
+        if (data.parsed.miles !== undefined) {
+          setMiles(String(data.parsed.miles));
+        }
+        if (data.parsed.items !== undefined) {
+          setItems(String(data.parsed.items));
+        }
+      }
+    } catch (error) {
+      console.error('Voice processing error:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    setVoiceError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(track => track.stop());
+        processVoice(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      if (error instanceof TypeError) {
+        // navigator.mediaDevices is undefined - needs HTTPS
+        setVoiceError('Microphone requires HTTPS (try Chrome on localhost)');
+      } else if (error instanceof Error) {
+        if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+          setVoiceError('No microphone found');
+        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          setVoiceError('Microphone permission denied');
+        } else if (error.name === 'NotReadableError' || error.name === 'AbortError') {
+          setVoiceError('Microphone is in use by another app');
+        } else {
+          setVoiceError(error.message);
+        }
+      }
+    }
+  }, [processVoice]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, [isRecording]);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -100,6 +198,29 @@ export default function Home() {
             </div>
             <h1 className="text-lg font-semibold tracking-tight">PayCalc</h1>
           </div>
+          <div className="flex items-center gap-1">
+          <button
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={isProcessing}
+            className={`p-2 rounded-lg transition-colors ${
+              isRecording
+                ? 'bg-red-500/20 text-red-400 animate-pulse'
+                : isProcessing
+                  ? 'bg-[#1e2028] text-emerald-400'
+                  : 'text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028]'
+            }`}
+          >
+            {isProcessing ? (
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill={isRecording ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+            )}
+          </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
             className={`p-2 rounded-lg transition-colors ${
@@ -113,8 +234,19 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </button>
+          </div>
         </div>
       </header>
+
+      {/* Voice error toast */}
+      {voiceError && (
+        <div className="max-w-lg mx-auto px-4 pt-4">
+          <div className="bg-red-950/50 border border-red-500/50 text-red-400 px-4 py-2 rounded-xl text-sm flex items-center justify-between">
+            <span>{voiceError}</span>
+            <button onClick={() => setVoiceError(null)} className="ml-2 hover:text-red-300">×</button>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {/* Settings Panel */}
