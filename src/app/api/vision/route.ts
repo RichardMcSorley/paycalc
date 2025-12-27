@@ -58,9 +58,19 @@ export async function POST(request: Request) {
       return Response.json({ error: 'No image provided' }, { status: 400, headers: corsHeaders });
     }
 
-    // Convert base64 data URI to a File with proper extension
-    const base64Data = image.split(',')[1];
-    const mimeType = image.split(';')[0].split(':')[1] || 'image/png';
+    // Handle both data URI format and raw base64
+    let base64Data: string;
+    let mimeType: string;
+
+    if (image.startsWith('data:')) {
+      // Full data URI: data:image/png;base64,ABC123...
+      base64Data = image.split(',')[1];
+      mimeType = image.split(';')[0].split(':')[1] || 'image/png';
+    } else {
+      // Raw base64 string (from iOS Shortcuts, etc.)
+      base64Data = image;
+      mimeType = 'image/png'; // Default to PNG
+    }
 
     // Map mime type to file extension
     const extMap: Record<string, string> = {
