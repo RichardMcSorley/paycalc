@@ -107,7 +107,7 @@ export async function POST(request: Request) {
         audio_url: audioUrl,
         prompt: `Extract delivery offer details from this audio. Return ONLY a JSON object with these fields (only include fields mentioned): pay (number), pickups (integer), drops (integer), miles (number), items (integer).`,
         system_prompt: SYSTEM_PROMPT,
-        model: 'google/gemini-2.5-flash-preview-05-20',
+        model: 'google/gemini-3-flash-preview',
       },
     });
 
