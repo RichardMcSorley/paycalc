@@ -27,6 +27,11 @@ export default function Home() {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Detect iOS for file input fallback (MediaRecorder is unreliable on iOS Safari)
+  const isIOS = typeof navigator !== 'undefined' &&
+    /iPad|iPhone|iPod/.test(navigator.userAgent);
 
   const processVoice = useCallback(async (audioBlob: Blob) => {
     setIsProcessing(true);
@@ -79,16 +84,27 @@ export default function Home() {
 
       // Try to use a format supported by FAL (mp4/aac, ogg, or wav)
       // Safari supports mp4, Chrome/Firefox support ogg/webm
-      let mimeType = 'audio/webm';
+      let mimeType: string | undefined;
+      let options: MediaRecorderOptions | undefined;
+
+      // Check supported formats in order of preference for FAL compatibility
       if (MediaRecorder.isTypeSupported('audio/mp4')) {
         mimeType = 'audio/mp4';
+        options = { mimeType };
       } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
         mimeType = 'audio/ogg';
-      } else if (MediaRecorder.isTypeSupported('audio/wav')) {
-        mimeType = 'audio/wav';
+        options = { mimeType };
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        mimeType = 'audio/webm';
+        options = { mimeType };
       }
+      // If nothing is explicitly supported, let the browser choose (iOS Safari fallback)
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      console.log('Creating MediaRecorder with mimeType:', mimeType || 'browser default');
+      const mediaRecorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
+      // Get the actual mimeType the recorder is using
+      const actualMimeType = mediaRecorder.mimeType || mimeType || 'audio/mp4';
+      console.log('MediaRecorder actual mimeType:', actualMimeType);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -99,13 +115,24 @@ export default function Home() {
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+        console.log('Recording stopped, chunks:', chunksRef.current.length);
+        console.log('Chunk sizes:', chunksRef.current.map(c => c.size));
+        // Use the recorder's actual mimeType
+        const blobType = mediaRecorder.mimeType || actualMimeType;
+        const audioBlob = new Blob(chunksRef.current, { type: blobType });
+        console.log('Audio blob size:', audioBlob.size, 'type:', audioBlob.type);
         stream.getTracks().forEach(track => track.stop());
+        if (audioBlob.size === 0) {
+          setVoiceError('No audio recorded - try speaking while the button is red');
+          setIsProcessing(false);
+          return;
+        }
         processVoice(audioBlob);
       };
 
       // Use timeslice to capture data every 100ms (ensures we get data even for short recordings)
       mediaRecorder.start(100);
+      console.log('Recording started, mimeType:', mediaRecorder.mimeType || actualMimeType);
       setIsPreparing(false);
       setIsRecording(true);
     } catch (error) {
@@ -134,6 +161,29 @@ export default function Home() {
       setIsRecording(false);
     }
   }, [isRecording]);
+
+  // Handle file input for iOS fallback
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      console.log('File selected:', file.name, file.type, file.size);
+      processVoice(file);
+    }
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  }, [processVoice]);
+
+  // Trigger recording - uses file input on iOS, MediaRecorder elsewhere
+  const handleMicClick = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else if (isIOS) {
+      // On iOS, trigger the native file picker with audio capture
+      fileInputRef.current?.click();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, isIOS, stopRecording, startRecording]);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -216,8 +266,17 @@ export default function Home() {
             <h1 className="text-lg font-semibold tracking-tight">PayCalc</h1>
           </div>
           <div className="flex items-center gap-1">
+          {/* Hidden file input for iOS audio capture */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="audio/*"
+            capture="user"
+            onChange={handleFileInput}
+            className="hidden"
+          />
           <button
-            onClick={isRecording ? stopRecording : startRecording}
+            onClick={handleMicClick}
             disabled={isProcessing || isPreparing}
             className={`p-2 rounded-lg transition-colors ${
               isRecording
