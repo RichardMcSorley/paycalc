@@ -485,19 +485,19 @@ export default function Home() {
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
                 <div className="text-2xl font-bold font-mono text-[#e8e9eb]">
-                  {results.maxes.maxMiles.toFixed(1)}
+                  {results.evaluation.maxMiles.toFixed(1)}
                 </div>
                 <div className="text-xs text-[#6b7280]">max miles</div>
               </div>
               <div>
                 <div className="text-2xl font-bold font-mono text-[#e8e9eb]">
-                  {results.maxes.maxItems}
+                  {results.evaluation.maxItems}
                 </div>
                 <div className="text-xs text-[#6b7280]">max items</div>
               </div>
               <div>
                 <div className="text-2xl font-bold font-mono text-[#e8e9eb]">
-                  {results.maxes.maxMins.toFixed(0)}
+                  {results.evaluation.maxMinutes.toFixed(0)}
                 </div>
                 <div className="text-xs text-[#6b7280]">min budget</div>
               </div>

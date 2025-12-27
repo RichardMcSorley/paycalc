@@ -201,7 +201,7 @@ export function evaluateOffer(
   // Build summary
   let summary: string;
   if (miles > 0) {
-    summary = `${verdictEmoji} ${verdictText}: $${effectiveHourly}/hr effective | ${payReq.totalMins.toFixed(1)} min | ${difference >= 0 ? '+' : ''}$${difference.toFixed(2)} vs required`;
+    summary = `${verdictEmoji} ${verdictText}: $${effectiveHourly}/hr | ${payReq.totalMins.toFixed(0)} min`;
   } else {
     summary = `${verdictEmoji} $${pay} = Max ${maxes.maxMiles.toFixed(1)} mi in ${maxes.maxMins.toFixed(0)} min`;
   }
