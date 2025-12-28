@@ -7,6 +7,14 @@ import {
   type CalculationSettings
 } from '@/lib/calculations';
 
+function formatTime(mins: number, short = false): string {
+  if (mins < 60) return short ? `${Math.round(mins)}m` : `${Math.round(mins)} min`;
+  const hours = Math.floor(mins / 60);
+  const remaining = Math.round(mins % 60);
+  if (remaining === 0) return short ? `${hours}h` : `${hours} hr`;
+  return short ? `${hours}h ${remaining}m` : `${hours} hr ${remaining} min`;
+}
+
 export default function Home() {
   // Offer inputs
   const [pay, setPay] = useState<string>('');
@@ -424,7 +432,7 @@ export default function Home() {
                   Max {results.evaluation.maxMiles.toFixed(1)} mi
                 </div>
                 <div className="text-sm text-[#6b7280]">
-                  for ${pay} at {results.evaluation.maxMinutes.toFixed(0)} min budget
+                  for ${pay} at {formatTime(results.evaluation.maxMinutes)} budget
                 </div>
               </>
             )}
@@ -433,7 +441,8 @@ export default function Home() {
 
         {/* Thresholds Card - show when not GOOD */}
         {hasOffer && results && hasRoute && results.verdict !== 'good' && (
-          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4">
+          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-3">
+            <h2 className="text-sm font-medium text-[#9ca3af]">Targets for a GOOD order</h2>
             <div className={`grid ${parseInt(items) > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-4 text-center`}>
               {/* Miles */}
               {(() => {
@@ -464,12 +473,12 @@ export default function Home() {
                 return (
                   <div>
                     <div className="text-xs text-[#6b7280] mb-1">Time</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">{currentTime.toFixed(0)}m</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">{formatTime(currentTime, true)}</div>
                     {canBeGood && (
-                      <div className="text-sm font-mono text-red-400 font-bold">−{delta.toFixed(0)}</div>
+                      <div className="text-sm font-mono text-red-400 font-bold">−{formatTime(delta, true)}</div>
                     )}
                     <div className={`text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 ${canBeGood ? 'text-emerald-400' : 'text-[#6b7280]'}`}>
-                      {canBeGood ? `${maxTime.toFixed(0)}m` : 'N/A'}
+                      {canBeGood ? formatTime(maxTime, true) : 'N/A'}
                     </div>
                   </div>
                 );
@@ -521,7 +530,7 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-[#9ca3af]">Time Breakdown</h2>
               <span className="text-sm font-mono text-[#e8e9eb]">
-                {results.evaluation.totalMinutes.toFixed(1)} min
+                {formatTime(results.evaluation.totalMinutes)}
               </span>
             </div>
 
@@ -560,7 +569,7 @@ export default function Home() {
                 <div key={i} className="flex items-center gap-1.5">
                   <div className={`w-2 h-2 rounded-full ${segment.color}`} />
                   <span className="text-xs text-[#6b7280]">{segment.label}</span>
-                  <span className="text-xs font-mono text-[#9ca3af]">{segment.value.toFixed(1)}</span>
+                  <span className="text-xs font-mono text-[#9ca3af]">{formatTime(segment.value, true)}</span>
                 </div>
               ))}
             </div>
