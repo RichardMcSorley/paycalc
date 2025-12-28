@@ -521,43 +521,48 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-[#9ca3af]">Time Breakdown</h2>
               <span className="text-sm font-mono text-[#e8e9eb]">
-                {results.evaluation.totalMinutes.toFixed(1)} min total
+                {results.evaluation.totalMinutes.toFixed(1)} min
               </span>
             </div>
 
-            <div className="space-y-2">
-              <TimeBar
-                label="Pickup"
-                value={results.evaluation.breakdown.pickup}
-                total={results.evaluation.totalMinutes}
-                color="bg-blue-500"
-              />
-              <TimeBar
-                label="Travel"
-                value={results.evaluation.breakdown.travel}
-                total={results.evaluation.totalMinutes}
-                color="bg-purple-500"
-              />
-              <TimeBar
-                label="Drop"
-                value={results.evaluation.breakdown.drop}
-                total={results.evaluation.totalMinutes}
-                color="bg-cyan-500"
-              />
-              {results.evaluation.breakdown.shopping > 0 && (
-                <TimeBar
-                  label="Shopping"
-                  value={results.evaluation.breakdown.shopping}
-                  total={results.evaluation.totalMinutes}
-                  color="bg-amber-500"
-                />
-              )}
-              <TimeBar
-                label="Return"
-                value={results.evaluation.breakdown.return}
-                total={results.evaluation.totalMinutes}
-                color="bg-rose-500"
-              />
+            {/* Stacked bar */}
+            <div className="h-4 bg-[#1e2028] rounded-full overflow-hidden flex">
+              {[
+                { value: results.evaluation.breakdown.pickup, color: 'bg-blue-500' },
+                { value: results.evaluation.breakdown.travel, color: 'bg-purple-500' },
+                { value: results.evaluation.breakdown.drop, color: 'bg-cyan-500' },
+                { value: results.evaluation.breakdown.shopping, color: 'bg-amber-500' },
+                { value: results.evaluation.breakdown.return, color: 'bg-rose-500' },
+              ].map((segment, i) => {
+                const percent = results.evaluation.totalMinutes > 0
+                  ? (segment.value / results.evaluation.totalMinutes) * 100
+                  : 0;
+                if (percent === 0) return null;
+                return (
+                  <div
+                    key={i}
+                    className={`${segment.color} transition-all duration-500`}
+                    style={{ width: `${percent}%` }}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {[
+                { label: 'Pickup', value: results.evaluation.breakdown.pickup, color: 'bg-blue-500' },
+                { label: 'Travel', value: results.evaluation.breakdown.travel, color: 'bg-purple-500' },
+                { label: 'Drop', value: results.evaluation.breakdown.drop, color: 'bg-cyan-500' },
+                { label: 'Shop', value: results.evaluation.breakdown.shopping, color: 'bg-amber-500' },
+                { label: 'Return', value: results.evaluation.breakdown.return, color: 'bg-rose-500' },
+              ].filter(s => s.value > 0).map((segment, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full ${segment.color}`} />
+                  <span className="text-xs text-[#6b7280]">{segment.label}</span>
+                  <span className="text-xs font-mono text-[#9ca3af]">{segment.value.toFixed(1)}</span>
+                </div>
+              ))}
             </div>
           </section>
         )}
