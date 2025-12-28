@@ -27,7 +27,7 @@ export async function GET() {
       text: 'Text to parse (e.g., "$8.50 for 3.2 miles, 2 drops")'
     },
     response: {
-      parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number' },
+      parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number', restaurants: 'string[]' },
       summary: 'Quick summary for display',
       url: 'https://paycalc.app/?pay=X&miles=Y&...'
     },
@@ -47,6 +47,7 @@ SCHEMA:
 - drops: Number of drop-offs (integer, default 1)
 - miles: Distance in miles (number)
 - items: Shopping items count (integer, default 0)
+- restaurants: List of restaurant names (array of strings, default [])
 
 RULES:
 - Add base pay + tip together for total pay
@@ -56,14 +57,14 @@ RULES:
 - Return ONLY JSON, no explanation
 
 EXAMPLES:
-Input: "$8.50 for 3 miles"
-Output: {"pay": 8.5, "miles": 3}
+Input: "$8.50 for 3 miles, Chipotle, Bob Evans"
+Output: {"pay": 8.5, "miles": 3, "restaurants": ["Chipotle", "Bob Evans"]}
 
-Input: "$24.34 batch earnings + $24.21 tip, 34.1 mi, 2 shop and deliver, 44 items"
-Output: {"pay": 48.55, "miles": 34.1, "drops": 2, "items": 44}
+Input: "$24.34 batch earnings + $24.21 tip, 34.1 mi, 2 shop and deliver, 44 items, Kroger"
+Output: {"pay": 48.55, "miles": 34.1, "drops": 2, "items": 44, "restaurants": ["Kroger"]}
 
 Input: "12 bucks 2 pickups 5 miles"
-Output: {"pay": 12, "pickups": 2, "miles": 5}`;
+Output: {"pay": 12, "pickups": 2, "miles": 5, "restaurants": []}`;
 
 export async function POST(request: Request) {
   try {
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
     const output = (result.data as { output?: string })?.output || '';
 
     // Try to extract JSON from the response
-    let parsed: Record<string, number> = {};
+    let parsed: { pay?: number; pickups?: number; drops?: number; miles?: number; items?: number; restaurants?: string[] } = {};
     try {
       const jsonMatch = output.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -108,6 +109,7 @@ export async function POST(request: Request) {
     if (parsed.drops !== undefined) params.set('drops', String(parsed.drops));
     if (parsed.miles !== undefined) params.set('miles', String(parsed.miles));
     if (parsed.items !== undefined) params.set('items', String(parsed.items));
+    if (parsed.restaurants && parsed.restaurants.length > 0) params.set('restaurants', parsed.restaurants.join(','));
 
     const url = `${protocol}://${host}/?${params.toString()}`;
 

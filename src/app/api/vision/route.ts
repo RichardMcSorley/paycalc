@@ -27,7 +27,7 @@ export async function GET() {
       image: 'base64 string or data URI'
     },
     response: {
-      parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number' },
+      parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number', restaurants: 'string[]' },
       evaluation: {
         verdict: 'good | decent | bad',
         verdictEmoji: '🟢 | 🟡 | 🔴',
@@ -52,11 +52,13 @@ SCHEMA:
 - drops: Number of drop-off locations (integer, 1-10, default 1)
 - miles: Total distance in miles (number, 0-100)
 - items: Number of items to shop for (integer, 0-100, default 0)
+- restaurants: List of restaurant names (array of strings, default [])
 
 RULES:
 - Look for dollar amounts, distances, store counts, drop-off counts
 - "Shop & Deliver" or item counts indicate shopping orders
 - Multiple store pickups or customer drop-offs should be counted
+- Extract restaurant/store names visible in the offer
 - Only include fields you can clearly identify
 - Return ONLY valid JSON, no explanation`;
 
@@ -110,7 +112,7 @@ export async function POST(request: Request) {
     const output = (result.data as { output?: string })?.output || '';
 
     // Try to extract JSON from the response
-    let parsed: Record<string, number> = {};
+    let parsed: { pay?: number; pickups?: number; drops?: number; miles?: number; items?: number; restaurants?: string[] } = {};
     try {
       // Find JSON in the response
       const jsonMatch = output.match(/\{[\s\S]*\}/);
@@ -135,6 +137,7 @@ export async function POST(request: Request) {
     if (parsed.drops !== undefined) params.set('drops', String(parsed.drops));
     if (parsed.miles !== undefined) params.set('miles', String(parsed.miles));
     if (parsed.items !== undefined) params.set('items', String(parsed.items));
+    if (parsed.restaurants && parsed.restaurants.length > 0) params.set('restaurants', parsed.restaurants.join(','));
 
     const url = `${protocol}://${host}/?${params.toString()}`;
 

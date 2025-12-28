@@ -27,7 +27,7 @@ export async function GET() {
       audio: 'base64 string or data URI (supports wav, mp3, m4a, ogg, aac, flac)'
     },
     response: {
-      parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number' },
+      parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number', restaurants: 'string[]' },
       evaluation: { verdict: 'good | decent | bad', summary: '...' },
       summary: 'Quick summary for display',
       url: 'https://paycalc.app/?pay=X&miles=Y&...'
@@ -46,6 +46,7 @@ SCHEMA:
 - drops: Number of drop-off locations (integer, 1-10, default 1)
 - miles: Total distance in miles (number, 0-100)
 - items: Number of items to shop for (integer, 0-100, default 0)
+- restaurants: List of restaurant names (array of strings, default [])
 
 RULES:
 - Listen for dollar amounts, distances, store counts, drop-off counts
@@ -54,9 +55,9 @@ RULES:
 - Return ONLY valid JSON, no explanation
 
 EXAMPLES:
-- "8 bucks 3 miles" → {"pay": 8, "miles": 3}
-- "12 dollars, 2 pickups, 5 miles" → {"pay": 12, "pickups": 2, "miles": 5}
-- "15 bucks for 2 drops, 4 miles, 10 items" → {"pay": 15, "drops": 2, "miles": 4, "items": 10}`;
+- "8 bucks 3 miles Chipotle" → {"pay": 8, "miles": 3, "restaurants": ["Chipotle"]}
+- "12 dollars, 2 pickups, 5 miles" → {"pay": 12, "pickups": 2, "miles": 5, "restaurants": []}
+- "15 bucks for 2 drops, 4 miles, 10 items, Kroger" → {"pay": 15, "drops": 2, "miles": 4, "items": 10, "restaurants": ["Kroger"]}`;
 
 export async function POST(request: Request) {
   try {
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
     const output = (result.data as { output?: string })?.output || '';
 
     // Try to extract JSON from the response
-    let parsed: Record<string, number> = {};
+    let parsed: { pay?: number; pickups?: number; drops?: number; miles?: number; items?: number; restaurants?: string[] } = {};
     try {
       const jsonMatch = output.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -138,6 +139,7 @@ export async function POST(request: Request) {
     if (parsed.drops !== undefined) params.set('drops', String(parsed.drops));
     if (parsed.miles !== undefined) params.set('miles', String(parsed.miles));
     if (parsed.items !== undefined) params.set('items', String(parsed.items));
+    if (parsed.restaurants && parsed.restaurants.length > 0) params.set('restaurants', parsed.restaurants.join(','));
 
     const url = `${protocol}://${host}/?${params.toString()}`;
 
