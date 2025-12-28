@@ -40,6 +40,11 @@ export default function Home() {
   const [showLightbox, setShowLightbox] = useState(false);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Share functionality
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+
   const processImage = useCallback(async (imageFile: File) => {
     setIsProcessing(true);
     try {
@@ -159,6 +164,173 @@ export default function Home() {
       effectiveHourly: evaluation.effectiveHourly
     };
   }, [pay, pickups, drops, miles, items, settings]);
+
+  // Share URL with parameters
+  const shareUrl = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (pay) params.set('pay', pay);
+    if (pickups !== '1') params.set('pickups', pickups);
+    if (drops !== '1') params.set('drops', drops);
+    if (miles) params.set('miles', miles);
+    if (items !== '0') params.set('items', items);
+
+    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'PayCalc Offer',
+          text: results ? `${results.verdict.toUpperCase()}: $${pay} for ${miles}mi - $${results.effectiveHourly}/hr` : `PayCalc: $${pay}`,
+          url: url
+        });
+        setShareStatus('Shared!');
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShareStatus('URL copied!');
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        await navigator.clipboard.writeText(url);
+        setShareStatus('URL copied!');
+      }
+    }
+    setTimeout(() => setShareStatus(null), 2000);
+  }, [pay, pickups, drops, miles, items, results]);
+
+  // Generate and share image using canvas drawing (avoids oklab issues)
+  const shareImage = useCallback(async () => {
+    if (!results) return;
+
+    setIsGeneratingImage(true);
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        setShareStatus('Failed to generate image');
+        setIsGeneratingImage(false);
+        return;
+      }
+
+      // Card dimensions
+      const width = 400;
+      const height = 280;
+      const scale = 2;
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      ctx.scale(scale, scale);
+
+      // Colors based on verdict
+      const colors = {
+        good: { bg: '#064e3b', border: '#10b981', text: '#34d399', subtext: '#6ee7b7' },
+        decent: { bg: '#713f12', border: '#eab308', text: '#facc15', subtext: '#fde047' },
+        bad: { bg: '#7f1d1d', border: '#ef4444', text: '#f87171', subtext: '#fca5a5' }
+      };
+      const c = colors[results.verdict];
+
+      // Background
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, c.bg);
+      gradient.addColorStop(1, '#0d0e12');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, width, height, 16);
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = c.border;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, width, height, 16);
+      ctx.stroke();
+
+      // Verdict text
+      ctx.fillStyle = c.text;
+      ctx.font = 'bold 48px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(results.verdict.toUpperCase(), width / 2, 80);
+
+      // Hourly rate
+      ctx.fillStyle = c.subtext;
+      ctx.font = 'bold 32px ui-monospace, monospace';
+      ctx.fillText(`$${results.effectiveHourly}/hr`, width / 2, 125);
+
+      // Divider
+      ctx.strokeStyle = '#1e2028';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(20, 150);
+      ctx.lineTo(width - 20, 150);
+      ctx.stroke();
+
+      // Offer details
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '14px system-ui, -apple-system, sans-serif';
+      ctx.fillText('Offer Details', width / 2, 175);
+
+      ctx.fillStyle = '#e8e9eb';
+      ctx.font = '18px ui-monospace, monospace';
+      const payNum = parseFloat(pay) || 0;
+      const milesNum = parseFloat(miles) || 0;
+      ctx.fillText(`$${payNum.toFixed(2)} · ${milesNum.toFixed(1)} mi`, width / 2, 200);
+
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '14px ui-monospace, monospace';
+      ctx.fillText(`${pickups} pickup · ${drops} drop${parseInt(drops) > 1 ? 's' : ''}`, width / 2, 225);
+
+      // Branding
+      ctx.fillStyle = '#4a4d58';
+      ctx.font = '12px system-ui, -apple-system, sans-serif';
+      ctx.fillText('PayCalc', width / 2, 260);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setShareStatus('Failed to generate image');
+          setIsGeneratingImage(false);
+          return;
+        }
+
+        const file = new File([blob], 'paycalc-verdict.png', { type: 'image/png' });
+
+        try {
+          if (navigator.share && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'PayCalc Verdict',
+              text: `${results.verdict.toUpperCase()}: $${pay} - $${results.effectiveHourly}/hr`
+            });
+            setShareStatus('Shared!');
+          } else {
+            // Fallback: download the image
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'paycalc-verdict.png';
+            a.click();
+            URL.revokeObjectURL(url);
+            setShareStatus('Image saved!');
+          }
+        } catch (err) {
+          if ((err as Error).name !== 'AbortError') {
+            // Fallback: download the image
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'paycalc-verdict.png';
+            a.click();
+            URL.revokeObjectURL(url);
+            setShareStatus('Image saved!');
+          }
+        }
+        setIsGeneratingImage(false);
+        setTimeout(() => setShareStatus(null), 2000);
+      }, 'image/png');
+    } catch (err) {
+      console.error('Image generation error:', err);
+      setShareStatus('Failed to generate image');
+      setIsGeneratingImage(false);
+      setTimeout(() => setShareStatus(null), 2000);
+    }
+  }, [pay, miles, pickups, drops, results]);
 
   const hasOffer = parseFloat(pay) > 0;
   const hasRoute = parseFloat(miles) > 0;
@@ -408,7 +580,7 @@ export default function Home() {
         {/* Combined Verdict & Thresholds Card */}
         {hasOffer && results && (
           <section
-            className={`rounded-2xl border-2 overflow-hidden transition-all duration-300 animate-scale-in ${
+            className={`rounded-2xl border-2 overflow-hidden transition-all duration-300 animate-scale-in relative ${
               hasRoute
                 ? results.verdict === 'good'
                   ? 'bg-gradient-to-b from-emerald-950/50 to-[#0d0e12] border-emerald-500/50 verdict-glow-good'
@@ -418,6 +590,16 @@ export default function Home() {
                 : 'bg-[#12141a] border-[#2a2d38]'
             }`}
           >
+            {/* Share button */}
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="absolute top-3 right-3 p-2 rounded-lg text-[#6b7280] hover:text-[#e8e9eb] hover:bg-white/5 transition-all btn-press z-10"
+              title="Share"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
             {/* Verdict Header */}
             <div className="p-6 text-center relative">
               {/* Decorative corner accents */}
@@ -827,6 +1009,90 @@ export default function Home() {
             {/* Label */}
             <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-xs text-[#6b7280]">
               Tap outside to close
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setShowShareModal(false)}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+
+          {/* Modal */}
+          <div
+            className="relative bg-[#12141a] rounded-2xl border border-[#2a2d38] p-6 w-full max-w-sm animate-in zoom-in-95 duration-200 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-[#e8e9eb]">Share</h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-1 text-[#6b7280] hover:text-[#e8e9eb] transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Status message */}
+            {shareStatus && (
+              <div className="mb-4 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-center">
+                <span className="text-sm text-emerald-400">{shareStatus}</span>
+              </div>
+            )}
+
+            {/* Share options */}
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  shareUrl();
+                  setShowShareModal(false);
+                }}
+                className="w-full flex items-center gap-4 p-4 bg-[#0a0b0d] border border-[#2a2d38] rounded-xl hover:border-emerald-500/50 hover:bg-[#1e2028] transition-all btn-press group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-medium text-[#e8e9eb]">Share Link</div>
+                  <div className="text-xs text-[#6b7280]">Copy URL with offer details</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  shareImage();
+                  setShowShareModal(false);
+                }}
+                disabled={isGeneratingImage}
+                className="w-full flex items-center gap-4 p-4 bg-[#0a0b0d] border border-[#2a2d38] rounded-xl hover:border-emerald-500/50 hover:bg-[#1e2028] transition-all btn-press group disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                  {isGeneratingImage ? (
+                    <svg className="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-medium text-[#e8e9eb]">Share Image</div>
+                  <div className="text-xs text-[#6b7280]">Generate verdict card image</div>
+                </div>
+              </button>
             </div>
           </div>
         </div>
