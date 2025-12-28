@@ -27,10 +27,12 @@ export default function Home() {
   const [settings, setSettings] = useState<CalculationSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
 
-  // What-if calculator (actual wait time, starts at perPickup)
+  // What-if calculator (extra wait defaults to setting, baseline is perPickup * pickups)
   const [waitTime, setWaitTime] = useState<number | null>(null);
-  const actualWaitTime = waitTime ?? settings.perPickup;
-  const extraMins = actualWaitTime - settings.perPickup;
+  const pickupsNum = parseInt(pickups) || 1;
+  const baselineWaitTime = settings.perPickup * pickupsNum;
+  const actualWaitTime = waitTime ?? settings.extraWaitTime;
+  const extraMins = actualWaitTime - baselineWaitTime;
 
   // Image input
   const [isProcessing, setIsProcessing] = useState(false);
@@ -162,7 +164,7 @@ export default function Home() {
   const hasRoute = parseFloat(miles) > 0;
 
   return (
-    <div className="min-h-screen bg-[#0a0b0d] text-[#e8e9eb] selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-[#0a0b0d] text-[#e8e9eb] selection:bg-emerald-500/30 noise-overlay">
       {/* Header */}
       <header className="border-b border-[#1e2028] bg-[#0d0e12]">
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
@@ -280,16 +282,22 @@ export default function Home() {
                 step={0.5}
               />
               <SettingInput
+                label="Extra Wait"
+                value={settings.extraWaitTime}
+                onChange={(v) => updateSettings({ ...settings, extraWaitTime: v })}
+                suffix="min"
+              />
+              <SliderInput
                 label="Return 1 Drop"
+                hint="% of trip miles added for driving back after single-drop orders"
                 value={settings.return1Drop}
                 onChange={(v) => updateSettings({ ...settings, return1Drop: v })}
-                suffix="%"
               />
-              <SettingInput
-                label="Return 2 Drop"
+              <SliderInput
+                label="Return 2+ Drops"
+                hint="% of trip miles added for return on multi-drop orders"
                 value={settings.return2Drop}
                 onChange={(v) => updateSettings({ ...settings, return2Drop: v })}
-                suffix="%"
               />
             </div>
           </section>
@@ -326,7 +334,7 @@ export default function Home() {
                 const newVal = Math.max(0, current - 0.25);
                 setPay(newVal.toFixed(2));
               }}
-              className="px-5 py-4 text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028] transition-colors"
+              className="px-5 py-4 text-[#6b7280] hover:text-emerald-400 hover:bg-[#1e2028] transition-all btn-press"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -350,7 +358,7 @@ export default function Home() {
                 const newVal = current + 0.25;
                 setPay(newVal.toFixed(2));
               }}
-              className="px-5 py-4 text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028] transition-colors"
+              className="px-5 py-4 text-[#6b7280] hover:text-emerald-400 hover:bg-[#1e2028] transition-all btn-press"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -400,37 +408,52 @@ export default function Home() {
         {/* Combined Verdict & Thresholds Card */}
         {hasOffer && results && (
           <section
-            className={`rounded-2xl border-2 overflow-hidden transition-all duration-300 ${
+            className={`rounded-2xl border-2 overflow-hidden transition-all duration-300 animate-scale-in ${
               hasRoute
                 ? results.verdict === 'good'
-                  ? 'bg-gradient-to-b from-emerald-950/40 to-[#0d0e12] border-emerald-500/40'
+                  ? 'bg-gradient-to-b from-emerald-950/50 to-[#0d0e12] border-emerald-500/50 verdict-glow-good'
                   : results.verdict === 'decent'
-                    ? 'bg-gradient-to-b from-yellow-950/40 to-[#0d0e12] border-yellow-500/40'
-                    : 'bg-gradient-to-b from-red-950/40 to-[#0d0e12] border-red-500/40'
+                    ? 'bg-gradient-to-b from-yellow-950/50 to-[#0d0e12] border-yellow-500/50 verdict-glow-decent'
+                    : 'bg-gradient-to-b from-red-950/50 to-[#0d0e12] border-red-500/50 verdict-glow-bad'
                 : 'bg-[#12141a] border-[#2a2d38]'
             }`}
           >
             {/* Verdict Header */}
-            <div className="p-6 text-center">
+            <div className="p-6 text-center relative">
+              {/* Decorative corner accents */}
+              {hasRoute && (
+                <>
+                  <div className={`absolute top-0 left-0 w-20 h-20 opacity-20 ${
+                    results.verdict === 'good' ? 'bg-gradient-to-br from-emerald-400' :
+                    results.verdict === 'decent' ? 'bg-gradient-to-br from-yellow-400' :
+                    'bg-gradient-to-br from-red-400'
+                  } to-transparent`} />
+                  <div className={`absolute bottom-0 right-0 w-20 h-20 opacity-20 ${
+                    results.verdict === 'good' ? 'bg-gradient-to-tl from-emerald-400' :
+                    results.verdict === 'decent' ? 'bg-gradient-to-tl from-yellow-400' :
+                    'bg-gradient-to-tl from-red-400'
+                  } to-transparent`} />
+                </>
+              )}
               {hasRoute ? (
                 <>
-                  <div className={`text-5xl font-black tracking-tight mb-1 ${
+                  <div className={`text-6xl font-black tracking-tighter mb-2 ${
                     results.verdict === 'good'
-                      ? 'text-emerald-400'
+                      ? 'verdict-text-good'
                       : results.verdict === 'decent'
-                        ? 'text-yellow-400'
-                        : 'text-red-400'
+                        ? 'verdict-text-decent'
+                        : 'verdict-text-bad'
                   }`}>
                     {results.verdict === 'good' ? 'GOOD' : results.verdict === 'decent' ? 'DECENT' : 'BAD'}
                   </div>
-                  <div className={`text-2xl font-bold font-mono ${
+                  <div className={`text-3xl font-bold font-mono tracking-tight ${
                     results.verdict === 'good'
-                      ? 'text-emerald-300/80'
+                      ? 'text-emerald-300/90'
                       : results.verdict === 'decent'
-                        ? 'text-yellow-300/80'
-                        : 'text-red-300/80'
+                        ? 'text-yellow-300/90'
+                        : 'text-red-300/90'
                   }`}>
-                    ${results.effectiveHourly}/hr
+                    ${results.effectiveHourly}<span className="text-lg opacity-70">/hr</span>
                   </div>
                 </>
               ) : (
@@ -571,12 +594,22 @@ export default function Home() {
 
         {/* What-If Delay Calculator */}
         {hasOffer && results && hasRoute && (
-          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-[#9ca3af]">What If... Pickup Wait Time</h2>
+          <section className="card-hypothetical rounded-2xl p-4 space-y-3 overflow-hidden">
+            <div className="flex items-center justify-between relative">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full border border-dashed border-emerald-500/40 flex items-center justify-center">
+                  <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-sm font-medium text-[#9ca3af]">Extra Wait Time</h2>
+                  <p className="text-[10px] text-[#4a4d58]">Simulate delays at pickup to see impact on pay</p>
+                </div>
+              </div>
               <button
                 onClick={() => setWaitTime(null)}
-                className="text-xs text-[#6b7280] hover:text-emerald-400 transition-colors"
+                className="text-xs text-[#6b7280] hover:text-emerald-400 transition-colors btn-press"
               >
                 Reset
               </button>
@@ -586,7 +619,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setWaitTime(Math.max(0, actualWaitTime - 1))}
-                className="px-3 py-1.5 text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028] rounded-lg transition-colors"
+                className="px-3 py-1.5 text-[#6b7280] hover:text-emerald-400 hover:bg-[#1e2028] rounded-lg transition-all btn-press"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -603,7 +636,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setWaitTime(actualWaitTime + 1)}
-                className="px-3 py-1.5 text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028] rounded-lg transition-colors"
+                className="px-3 py-1.5 text-[#6b7280] hover:text-emerald-400 hover:bg-[#1e2028] rounded-lg transition-all btn-press"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -617,7 +650,7 @@ export default function Home() {
                 <button
                   key={mins}
                   onClick={() => setWaitTime(actualWaitTime + mins)}
-                  className="px-3 py-1 text-xs font-mono text-[#6b7280] hover:text-emerald-400 hover:bg-[#1e2028] rounded-lg transition-colors"
+                  className="px-3 py-1.5 text-xs font-mono text-[#6b7280] hover:text-emerald-400 hover:bg-emerald-500/10 border border-transparent hover:border-emerald-500/30 rounded-lg transition-all btn-press"
                 >
                   +{mins}
                 </button>
@@ -627,7 +660,6 @@ export default function Home() {
             {/* Impact calculation */}
             {(() => {
               const currentPay = parseFloat(pay) || 0;
-              const hasChange = extraMins !== 0;
               const newTotalMins = results.evaluation.totalMinutes + extraMins;
               const newOrdersPerHour = Math.min(settings.maxOrdersPerHour, 60 / newTotalMins);
               const newEffectiveHourly = Math.round(currentPay * newOrdersPerHour * 100) / 100;
@@ -647,21 +679,21 @@ export default function Home() {
                 <div className="pt-3 border-t border-[#1e2028] space-y-2">
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
-                      <div className="text-xs text-[#6b7280]">New Time</div>
-                      <div className={`text-lg font-mono ${hasChange ? 'text-[#e8e9eb]' : 'text-[#3a3d48]'}`}>
-                        {hasChange ? formatTime(newTotalMins, true) : '—'}
+                      <div className="text-xs text-[#6b7280]">Total Time</div>
+                      <div className="text-lg font-mono text-[#e8e9eb]">
+                        {formatTime(newTotalMins, true)}
                       </div>
                     </div>
                     <div>
-                      <div className="text-xs text-[#6b7280]">New $/hr</div>
-                      <div className={`text-lg font-mono ${hasChange ? verdictColor : 'text-[#3a3d48]'}`}>
-                        {hasChange ? `$${newEffectiveHourly}` : '—'}
+                      <div className="text-xs text-[#6b7280]">$/hr</div>
+                      <div className={`text-lg font-mono ${verdictColor}`}>
+                        ${newEffectiveHourly}
                       </div>
                     </div>
                     <div>
                       <div className="text-xs text-[#6b7280]">Verdict</div>
-                      <div className={`text-lg font-bold ${hasChange ? verdictColor : 'text-[#3a3d48]'}`}>
-                        {hasChange ? newVerdict : '—'}
+                      <div className={`text-lg font-bold ${verdictColor}`}>
+                        {newVerdict}
                       </div>
                     </div>
                   </div>
@@ -669,10 +701,10 @@ export default function Home() {
                   <div className="flex items-center justify-between pt-2 border-t border-[#1e2028]">
                     <span className="text-sm text-[#6b7280]">Pay needed for GOOD</span>
                     <div className="text-right">
-                      <span className={`text-lg font-mono font-bold ${hasChange ? 'text-emerald-400' : 'text-[#3a3d48]'}`}>
-                        {hasChange ? `$${payForGood.toFixed(2)}` : '—'}
+                      <span className="text-lg font-mono font-bold text-emerald-400">
+                        ${payForGood.toFixed(2)}
                       </span>
-                      {hasChange && (
+                      {payDelta > 0 && (
                         <span className="text-sm font-mono text-emerald-400 ml-2">(+${payDelta.toFixed(2)})</span>
                       )}
                     </div>
@@ -685,52 +717,71 @@ export default function Home() {
 
         {/* Breakdown */}
         {hasOffer && results && hasRoute && (
-          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-3">
+          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-[#9ca3af]">Time Breakdown</h2>
-              <span className="text-sm font-mono text-[#e8e9eb]">
-                {formatTime(results.evaluation.totalMinutes)}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#6b7280]">Total</span>
+                <span className="text-base font-mono font-semibold text-[#e8e9eb] bg-[#0a0b0d] px-2 py-0.5 rounded-lg border border-[#2a2d38]">
+                  {formatTime(results.evaluation.totalMinutes)}
+                </span>
+              </div>
             </div>
 
-            {/* Stacked bar */}
-            <div className="h-4 bg-[#1e2028] rounded-full overflow-hidden flex">
+            {/* Stacked bar with glow */}
+            <div className="relative">
+              <div className="h-5 bg-[#0a0b0d] rounded-full overflow-hidden flex border border-[#1e2028] shadow-inner">
+                {[
+                  { value: results.evaluation.breakdown.pickup, color: 'bg-blue-500', glow: 'shadow-blue-500/30' },
+                  { value: results.evaluation.breakdown.travel, color: 'bg-purple-500', glow: 'shadow-purple-500/30' },
+                  { value: results.evaluation.breakdown.drop, color: 'bg-cyan-500', glow: 'shadow-cyan-500/30' },
+                  { value: results.evaluation.breakdown.shopping, color: 'bg-amber-500', glow: 'shadow-amber-500/30' },
+                  { value: results.evaluation.breakdown.return, color: 'bg-rose-500', glow: 'shadow-rose-500/30' },
+                ].map((segment, i) => {
+                  const percent = results.evaluation.totalMinutes > 0
+                    ? (segment.value / results.evaluation.totalMinutes) * 100
+                    : 0;
+                  if (percent === 0) return null;
+                  return (
+                    <div
+                      key={i}
+                      className={`${segment.color} time-segment transition-all duration-500`}
+                      style={{ width: `${percent}%` }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Enhanced Legend - Grid layout with percentages */}
+            <div className="grid grid-cols-2 gap-2">
               {[
-                { value: results.evaluation.breakdown.pickup, color: 'bg-blue-500' },
-                { value: results.evaluation.breakdown.travel, color: 'bg-purple-500' },
-                { value: results.evaluation.breakdown.drop, color: 'bg-cyan-500' },
-                { value: results.evaluation.breakdown.shopping, color: 'bg-amber-500' },
-                { value: results.evaluation.breakdown.return, color: 'bg-rose-500' },
-              ].map((segment, i) => {
+                { label: 'Pickup', value: results.evaluation.breakdown.pickup, color: 'bg-blue-500', textColor: 'text-blue-400' },
+                { label: 'Travel', value: results.evaluation.breakdown.travel, color: 'bg-purple-500', textColor: 'text-purple-400' },
+                { label: 'Drop-off', value: results.evaluation.breakdown.drop, color: 'bg-cyan-500', textColor: 'text-cyan-400' },
+                { label: 'Shopping', value: results.evaluation.breakdown.shopping, color: 'bg-amber-500', textColor: 'text-amber-400' },
+                { label: 'Return', value: results.evaluation.breakdown.return, color: 'bg-rose-500', textColor: 'text-rose-400' },
+              ].filter(s => s.value > 0).map((segment, i) => {
                 const percent = results.evaluation.totalMinutes > 0
-                  ? (segment.value / results.evaluation.totalMinutes) * 100
+                  ? Math.round((segment.value / results.evaluation.totalMinutes) * 100)
                   : 0;
-                if (percent === 0) return null;
                 return (
-                  <div
-                    key={i}
-                    className={`${segment.color} transition-all duration-500`}
-                    style={{ width: `${percent}%` }}
-                  />
+                  <div key={i} className="flex items-center justify-between bg-[#0a0b0d]/50 rounded-lg px-3 py-2 border border-[#1e2028]/50">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${segment.color} shadow-sm`} />
+                      <span className="text-xs text-[#9ca3af]">{segment.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-mono font-semibold ${segment.textColor}`}>
+                        {formatTime(segment.value, true)}
+                      </span>
+                      <span className="text-[10px] font-mono text-[#4a4d58] w-8 text-right">
+                        {percent}%
+                      </span>
+                    </div>
+                  </div>
                 );
               })}
-            </div>
-
-            {/* Legend */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {[
-                { label: 'Pickup', value: results.evaluation.breakdown.pickup, color: 'bg-blue-500' },
-                { label: 'Travel', value: results.evaluation.breakdown.travel, color: 'bg-purple-500' },
-                { label: 'Drop', value: results.evaluation.breakdown.drop, color: 'bg-cyan-500' },
-                { label: 'Shop', value: results.evaluation.breakdown.shopping, color: 'bg-amber-500' },
-                { label: 'Return', value: results.evaluation.breakdown.return, color: 'bg-rose-500' },
-              ].filter(s => s.value > 0).map((segment, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${segment.color}`} />
-                  <span className="text-xs text-[#6b7280]">{segment.label}</span>
-                  <span className="text-xs font-mono text-[#9ca3af]">{formatTime(segment.value, true)}</span>
-                </div>
-              ))}
             </div>
           </section>
         )}
@@ -821,7 +872,7 @@ function NumberInput({
         <button
           type="button"
           onClick={decrement}
-          className="flex-shrink-0 px-4 py-3 text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028] transition-colors"
+          className="flex-shrink-0 px-4 py-3 text-[#6b7280] hover:text-emerald-400 hover:bg-[#1e2028] transition-all btn-press"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -837,7 +888,7 @@ function NumberInput({
         <button
           type="button"
           onClick={increment}
-          className="flex-shrink-0 px-4 py-3 text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028] transition-colors"
+          className="flex-shrink-0 px-4 py-3 text-[#6b7280] hover:text-emerald-400 hover:bg-[#1e2028] transition-all btn-press"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -882,6 +933,62 @@ function SettingInput({
         {suffix && (
           <span className="flex-shrink-0 pr-3 text-sm text-[#6b7280]">{suffix}</span>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Slider input for percentage values
+function SliderInput({
+  label,
+  value,
+  onChange,
+  hint,
+  min = 0,
+  max = 100,
+  step = 5
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  hint?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
+  const progress = ((value - min) / (max - min)) * 100;
+
+  return (
+    <div className="col-span-2 py-1">
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <label className="text-xs text-[#6b7280] ml-1">{label}</label>
+          {hint && (
+            <p className="text-[10px] text-[#4a4d58] ml-1 mt-0.5">{hint}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 bg-[#0a0b0d] border border-[#2a2d38] rounded-lg px-3 py-1">
+          <span className="text-sm font-mono text-emerald-400 font-semibold tabular-nums">
+            {value}
+          </span>
+          <span className="text-xs text-[#6b7280]">%</span>
+        </div>
+      </div>
+      <div className="relative px-1">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(parseInt(e.target.value))}
+          className="slider-return w-full"
+          style={{ '--slider-progress': `${progress}%` } as React.CSSProperties}
+        />
+        <div className="flex justify-between mt-1 px-0.5">
+          <span className="text-[10px] text-[#3a3d48] font-mono">{min}%</span>
+          <span className="text-[10px] text-[#3a3d48] font-mono">{max}%</span>
+        </div>
       </div>
     </div>
   );

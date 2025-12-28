@@ -8,6 +8,7 @@ export interface CalculationSettings {
   maxOrdersPerHour: number; // max orders possible per hour
   return1Drop: number;     // return % for 1 drop
   return2Drop: number;     // return % for 2 drops
+  extraWaitTime: number;   // extra wait time setting for calculator (minutes)
 }
 
 export interface MaxesInput {
@@ -49,7 +50,8 @@ export const DEFAULT_SETTINGS: CalculationSettings = {
   minHourlyPay: 0,
   maxOrdersPerHour: 3,
   return1Drop: 100,
-  return2Drop: 50
+  return2Drop: 50,
+  extraWaitTime: 8
 };
 
 export function calculateMaxes(
