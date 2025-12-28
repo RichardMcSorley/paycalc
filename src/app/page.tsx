@@ -360,14 +360,14 @@ export default function Home() {
               value={pickups}
               onChange={setPickups}
               min={1}
-              max={10}
+              max={999}
             />
             <NumberInput
               label="Drops"
               value={drops}
               onChange={setDrops}
               min={1}
-              max={10}
+              max={999}
             />
           </div>
 
@@ -378,7 +378,7 @@ export default function Home() {
               value={miles}
               onChange={setMiles}
               min={0}
-              max={100}
+              max={999}
               step={0.5}
               decimals
             />
@@ -387,7 +387,7 @@ export default function Home() {
               value={items}
               onChange={setItems}
               min={0}
-              max={100}
+              max={999}
             />
           </div>
         </section>
