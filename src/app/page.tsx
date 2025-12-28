@@ -524,6 +524,88 @@ export default function Home() {
           </section>
         )}
 
+        {/* Headroom Card - show when GOOD */}
+        {hasOffer && results && hasRoute && results.verdict === 'good' && (
+          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-3">
+            <h2 className="text-sm font-medium text-[#9ca3af]">Before it goes BAD</h2>
+            <div className={`grid ${parseInt(items) > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-4 text-center`}>
+              {/* Miles */}
+              {(() => {
+                const currentMiles = parseFloat(miles) || 0;
+                const maxMiles = results.evaluation.thresholds.maxMilesBeforeBad ?? 0;
+                const buffer = maxMiles - currentMiles;
+                return (
+                  <div>
+                    <div className="text-xs text-[#6b7280] mb-1">Miles</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">{currentMiles.toFixed(1)}</div>
+                    <div className="text-sm font-mono text-emerald-400 font-bold">
+                      +{buffer.toFixed(1)}
+                    </div>
+                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-red-400">
+                      {maxMiles.toFixed(1)}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Time */}
+              {(() => {
+                const currentTime = results.evaluation.totalMinutes;
+                const maxTime = results.evaluation.thresholds.maxTimeBeforeBad ?? 0;
+                const buffer = maxTime - currentTime;
+                return (
+                  <div>
+                    <div className="text-xs text-[#6b7280] mb-1">Time</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">{formatTime(currentTime, true)}</div>
+                    <div className="text-sm font-mono text-emerald-400 font-bold">
+                      +{formatTime(buffer, true)}
+                    </div>
+                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-red-400">
+                      {formatTime(maxTime, true)}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Items - only show if there are items */}
+              {parseInt(items) > 0 && (() => {
+                const currentItems = parseInt(items) || 0;
+                const maxItems = results.evaluation.thresholds.maxItemsBeforeBad ?? 0;
+                const buffer = maxItems - currentItems;
+                return (
+                  <div>
+                    <div className="text-xs text-[#6b7280] mb-1">Items</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">{currentItems}</div>
+                    <div className="text-sm font-mono text-emerald-400 font-bold">
+                      +{buffer}
+                    </div>
+                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-red-400">
+                      {maxItems}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Pay */}
+              {(() => {
+                const currentPay = parseFloat(pay) || 0;
+                const minPay = results.evaluation.thresholds.minPayBeforeBad;
+                const buffer = currentPay - minPay;
+                return (
+                  <div>
+                    <div className="text-xs text-[#6b7280] mb-1">Pay</div>
+                    <div className="text-lg font-mono text-[#e8e9eb]">${currentPay.toFixed(2)}</div>
+                    <div className="text-sm font-mono text-emerald-400 font-bold">−${buffer.toFixed(2)}</div>
+                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-red-400">
+                      ${minPay.toFixed(2)}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </section>
+        )}
+
         {/* Breakdown */}
         {hasOffer && results && hasRoute && (
           <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-3">

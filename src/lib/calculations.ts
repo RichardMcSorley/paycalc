@@ -162,6 +162,11 @@ export interface OfferEvaluation {
     minPayForGood: number;
     // Whether GOOD is achievable
     canBeGood: boolean;
+    // Before BAD thresholds (for GOOD orders - when does it become BAD)
+    maxMilesBeforeBad: number | null;  // null = infinite (capped by maxOrdersPerHour)
+    maxTimeBeforeBad: number | null;
+    maxItemsBeforeBad: number | null;
+    minPayBeforeBad: number;
   };
 
   // Time breakdown
@@ -263,6 +268,62 @@ export function evaluateOffer(
     ? Math.round((expectedPay / ordersPerHour) * 100) / 100
     : 0;
 
+  // BEFORE BAD THRESHOLDS (for GOOD orders - when does it become BAD)
+  // These calculate how much MORE time/miles/items until BAD, or how much LESS pay
+  let maxTimeBeforeBad: number | null = null;
+  let maxMilesBeforeBad: number | null = null;
+  let maxItemsBeforeBad: number | null = null;
+  let minPayBeforeBad = 0;
+
+  // Check if we're CURRENTLY capped (ordersPerHour = maxOrdersPerHour)
+  // Cap threshold: totalMins <= 60/maxOrdersPerHour
+  const capThresholdMins = 60 / maxOrdersPerHour;
+  const isCurrentlyCapped = payReq.totalMins <= capThresholdMins;
+
+  if (settings.minHourlyPay > 0) {
+    // BAD when effectiveHourly < minHourlyPay
+    // effectiveHourly = pay * min(maxOrdersPerHour, 60/totalMins)
+
+    if (isCurrentlyCapped) {
+      // Currently capped - adding time won't reduce effectiveHourly until we pass the cap threshold
+      // effectiveHourly stays at pay * maxOrdersPerHour until totalMins > capThresholdMins
+      const cappedEffectiveHourly = pay * maxOrdersPerHour;
+      if (cappedEffectiveHourly >= settings.minHourlyPay) {
+        // Even after uncapping, calculate when it would hit minHourlyPay
+        // After cap: effectiveHourly = pay * 60 / totalMins
+        // totalMins = pay * 60 / minHourlyPay
+        maxTimeBeforeBad = Math.round((pay * 60 / settings.minHourlyPay) * 10) / 10;
+      } else {
+        // Would be BAD immediately after uncapping
+        maxTimeBeforeBad = capThresholdMins;
+      }
+    } else {
+      // Not capped - calculate when effectiveHourly drops to minHourlyPay
+      // pay * 60 / totalMins = minHourlyPay
+      // totalMins = pay * 60 / minHourlyPay
+      maxTimeBeforeBad = Math.round((pay * 60 / settings.minHourlyPay) * 10) / 10;
+    }
+
+    // Convert time to miles (given current pickups, drops, items)
+    const availableTimeForTravel = maxTimeBeforeBad - fixedTime;
+    const maxTravelTimeBeforeBad = availableTimeForTravel / travelMultiplier;
+    maxMilesBeforeBad = Math.max(0, Math.round((maxTravelTimeBeforeBad * avgSpeed / 60) * 10) / 10);
+
+    // Convert time to items (given current pickups, drops, miles)
+    const availableTimeForItemsBeforeBad = maxTimeBeforeBad - fixedTimeWithoutItems;
+    maxItemsBeforeBad = Math.max(0, Math.floor(availableTimeForItemsBeforeBad / perItem));
+
+    // Min pay before BAD (when effectiveHourly = minHourlyPay)
+    minPayBeforeBad = Math.round((settings.minHourlyPay / ordersPerHour) * 100) / 100;
+  } else {
+    // BAD when pay < payReq (based on expectedPay rate)
+    // This is the same as maxMins
+    maxTimeBeforeBad = maxMins;
+    maxMilesBeforeBad = maxMilesForDecent;
+    maxItemsBeforeBad = maxItemsForDecent;
+    minPayBeforeBad = payReq.payReq;
+  }
+
   // Build summary
   let summary: string;
   if (miles > 0) {
@@ -290,7 +351,11 @@ export function evaluateOffer(
       maxItemsForDecent,
       maxItemsForGood,
       minPayForGood,
-      canBeGood
+      canBeGood,
+      maxMilesBeforeBad,
+      maxTimeBeforeBad,
+      maxItemsBeforeBad,
+      minPayBeforeBad
     },
     breakdown: {
       pickup: payReq.pickupTime,
