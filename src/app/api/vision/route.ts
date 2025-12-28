@@ -158,6 +158,10 @@ export async function POST(request: Request) {
       evaluation,
       summary: evaluation?.summary || 'Could not evaluate offer',
       url,
+      pay: parsed.pay,
+      miles: parsed.miles,
+      pickups: parsed.pickups,
+      restaurants: parsed.restaurants,
     }, { headers: corsHeaders });
   } catch (error) {
     console.error('Vision API error:', error);
