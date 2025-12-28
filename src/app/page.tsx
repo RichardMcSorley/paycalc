@@ -27,6 +27,11 @@ export default function Home() {
   const [settings, setSettings] = useState<CalculationSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
 
+  // What-if calculator (actual wait time, starts at perPickup)
+  const [waitTime, setWaitTime] = useState<number | null>(null);
+  const actualWaitTime = waitTime ?? settings.perPickup;
+  const extraMins = actualWaitTime - settings.perPickup;
+
   // Image input
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -392,217 +397,289 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Verdict */}
+        {/* Combined Verdict & Thresholds Card */}
         {hasOffer && results && (
           <section
-            className={`rounded-2xl border-2 p-6 text-center transition-all duration-300 ${
+            className={`rounded-2xl border-2 overflow-hidden transition-all duration-300 ${
               hasRoute
                 ? results.verdict === 'good'
-                  ? 'bg-emerald-950/30 border-emerald-500/50'
+                  ? 'bg-gradient-to-b from-emerald-950/40 to-[#0d0e12] border-emerald-500/40'
                   : results.verdict === 'decent'
-                    ? 'bg-yellow-950/30 border-yellow-500/50'
-                    : 'bg-red-950/30 border-red-500/50'
+                    ? 'bg-gradient-to-b from-yellow-950/40 to-[#0d0e12] border-yellow-500/40'
+                    : 'bg-gradient-to-b from-red-950/40 to-[#0d0e12] border-red-500/40'
                 : 'bg-[#12141a] border-[#2a2d38]'
             }`}
           >
-            {hasRoute ? (
-              <>
-                <div className={`text-5xl font-black tracking-tight mb-2 ${
-                  results.verdict === 'good'
-                    ? 'text-emerald-400'
-                    : results.verdict === 'decent'
-                      ? 'text-yellow-400'
-                      : 'text-red-400'
-                }`}>
-                  {results.verdict === 'good' ? 'GOOD' : results.verdict === 'decent' ? 'DECENT' : 'BAD'}
+            {/* Verdict Header */}
+            <div className="p-6 text-center">
+              {hasRoute ? (
+                <>
+                  <div className={`text-5xl font-black tracking-tight mb-1 ${
+                    results.verdict === 'good'
+                      ? 'text-emerald-400'
+                      : results.verdict === 'decent'
+                        ? 'text-yellow-400'
+                        : 'text-red-400'
+                  }`}>
+                    {results.verdict === 'good' ? 'GOOD' : results.verdict === 'decent' ? 'DECENT' : 'BAD'}
+                  </div>
+                  <div className={`text-2xl font-bold font-mono ${
+                    results.verdict === 'good'
+                      ? 'text-emerald-300/80'
+                      : results.verdict === 'decent'
+                        ? 'text-yellow-300/80'
+                        : 'text-red-300/80'
+                  }`}>
+                    ${results.effectiveHourly}/hr
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-[#e8e9eb] mb-1">
+                    Max {results.evaluation.maxMiles.toFixed(1)} mi
+                  </div>
+                  <div className="text-sm text-[#6b7280]">
+                    for ${pay} at {formatTime(results.evaluation.maxMinutes)} budget
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Thresholds Section - integrated below verdict */}
+            {hasRoute && (
+              <div className="bg-[#0a0b0d]/60 border-t border-[#1e2028]/50 px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-[#6b7280] uppercase tracking-wider">
+                    {results.verdict === 'good' ? 'Buffer to BAD' : 'Need for GOOD'}
+                  </span>
                 </div>
-                <div className={`text-2xl font-bold font-mono ${
-                  results.verdict === 'good'
-                    ? 'text-emerald-300'
-                    : results.verdict === 'decent'
-                      ? 'text-yellow-300'
-                      : 'text-red-300'
-                }`}>
-                  ${results.effectiveHourly}/hr effective
+                <div className={`grid ${parseInt(items) > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-3`}>
+                  {/* Miles */}
+                  {(() => {
+                    const currentMiles = parseFloat(miles) || 0;
+                    const isGood = results.verdict === 'good';
+                    const targetMiles = isGood
+                      ? (results.evaluation.thresholds.maxMilesBeforeBad ?? 0)
+                      : (results.evaluation.thresholds.maxMilesForGood || 0);
+                    const delta = isGood ? (targetMiles - currentMiles) : (currentMiles - targetMiles);
+                    const canBeGood = results.evaluation.thresholds.canBeGood;
+                    const showData = isGood || canBeGood;
+                    return (
+                      <div className="text-center">
+                        <div className="text-[10px] text-[#6b7280] mb-0.5">Miles</div>
+                        <div className="text-sm font-mono text-[#e8e9eb]">{currentMiles.toFixed(1)}</div>
+                        <div className={`text-xs font-mono font-semibold ${
+                          isGood ? 'text-emerald-400' : (showData ? 'text-red-400' : 'text-[#3a3d48]')
+                        }`}>
+                          {showData ? (isGood ? `+${delta.toFixed(1)}` : `−${delta.toFixed(1)}`) : '—'}
+                        </div>
+                        <div className={`text-xs font-mono mt-0.5 pt-0.5 border-t border-[#2a2d38]/50 ${
+                          isGood ? 'text-red-400/70' : (showData ? 'text-emerald-400/70' : 'text-[#3a3d48]')
+                        }`}>
+                          {showData ? targetMiles.toFixed(1) : 'N/A'}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Time */}
+                  {(() => {
+                    const currentTime = results.evaluation.totalMinutes;
+                    const isGood = results.verdict === 'good';
+                    const targetTime = isGood
+                      ? (results.evaluation.thresholds.maxTimeBeforeBad ?? 0)
+                      : (results.evaluation.thresholds.maxTimeForGood || 0);
+                    const delta = isGood ? (targetTime - currentTime) : (currentTime - targetTime);
+                    const canBeGood = results.evaluation.thresholds.canBeGood;
+                    const showData = isGood || canBeGood;
+                    return (
+                      <div className="text-center">
+                        <div className="text-[10px] text-[#6b7280] mb-0.5">Time</div>
+                        <div className="text-sm font-mono text-[#e8e9eb]">{formatTime(currentTime, true)}</div>
+                        <div className={`text-xs font-mono font-semibold ${
+                          isGood ? 'text-emerald-400' : (showData ? 'text-red-400' : 'text-[#3a3d48]')
+                        }`}>
+                          {showData ? (isGood ? `+${formatTime(delta, true)}` : `−${formatTime(delta, true)}`) : '—'}
+                        </div>
+                        <div className={`text-xs font-mono mt-0.5 pt-0.5 border-t border-[#2a2d38]/50 ${
+                          isGood ? 'text-red-400/70' : (showData ? 'text-emerald-400/70' : 'text-[#3a3d48]')
+                        }`}>
+                          {showData ? formatTime(targetTime, true) : 'N/A'}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Items - only show if there are items */}
+                  {parseInt(items) > 0 && (() => {
+                    const currentItems = parseInt(items) || 0;
+                    const isGood = results.verdict === 'good';
+                    const targetItems = isGood
+                      ? (results.evaluation.thresholds.maxItemsBeforeBad ?? 0)
+                      : (results.evaluation.thresholds.maxItemsForGood || 0);
+                    const delta = isGood ? (targetItems - currentItems) : (currentItems - targetItems);
+                    const canBeGood = results.evaluation.thresholds.canBeGood;
+                    const showData = isGood || canBeGood;
+                    return (
+                      <div className="text-center">
+                        <div className="text-[10px] text-[#6b7280] mb-0.5">Items</div>
+                        <div className="text-sm font-mono text-[#e8e9eb]">{currentItems}</div>
+                        <div className={`text-xs font-mono font-semibold ${
+                          isGood ? 'text-emerald-400' : (showData ? 'text-red-400' : 'text-[#3a3d48]')
+                        }`}>
+                          {showData ? (isGood ? `+${delta}` : `−${delta}`) : '—'}
+                        </div>
+                        <div className={`text-xs font-mono mt-0.5 pt-0.5 border-t border-[#2a2d38]/50 ${
+                          isGood ? 'text-red-400/70' : (showData ? 'text-emerald-400/70' : 'text-[#3a3d48]')
+                        }`}>
+                          {showData ? targetItems : 'N/A'}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Pay */}
+                  {(() => {
+                    const currentPay = parseFloat(pay) || 0;
+                    const isGood = results.verdict === 'good';
+                    const targetPay = isGood
+                      ? results.evaluation.thresholds.minPayBeforeBad
+                      : results.evaluation.thresholds.minPayForGood;
+                    const delta = isGood ? (currentPay - targetPay) : (targetPay - currentPay);
+                    return (
+                      <div className="text-center">
+                        <div className="text-[10px] text-[#6b7280] mb-0.5">Pay</div>
+                        <div className="text-sm font-mono text-[#e8e9eb]">${currentPay.toFixed(2)}</div>
+                        <div className={`text-xs font-mono font-semibold ${
+                          isGood ? 'text-emerald-400' : 'text-emerald-400'
+                        }`}>
+                          {isGood ? `−$${delta.toFixed(2)}` : `+$${delta.toFixed(2)}`}
+                        </div>
+                        <div className={`text-xs font-mono mt-0.5 pt-0.5 border-t border-[#2a2d38]/50 ${
+                          isGood ? 'text-red-400/70' : 'text-emerald-400/70'
+                        }`}>
+                          ${targetPay.toFixed(2)}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-[#e8e9eb] mb-1">
-                  Max {results.evaluation.maxMiles.toFixed(1)} mi
-                </div>
-                <div className="text-sm text-[#6b7280]">
-                  for ${pay} at {formatTime(results.evaluation.maxMinutes)} budget
-                </div>
-              </>
+              </div>
             )}
           </section>
         )}
 
-        {/* Thresholds Card - show when not GOOD */}
-        {hasOffer && results && hasRoute && results.verdict !== 'good' && (
+        {/* What-If Delay Calculator */}
+        {hasOffer && results && hasRoute && (
           <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-3">
-            <h2 className="text-sm font-medium text-[#9ca3af]">Targets for a GOOD order</h2>
-            <div className={`grid ${parseInt(items) > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-4 text-center`}>
-              {/* Miles */}
-              {(() => {
-                const currentMiles = parseFloat(miles) || 0;
-                const maxMiles = results.evaluation.thresholds.maxMilesForGood || 0;
-                const delta = currentMiles - maxMiles;
-                const canBeGood = results.evaluation.thresholds.canBeGood;
-                return (
-                  <div>
-                    <div className="text-xs text-[#6b7280] mb-1">Miles</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">{currentMiles.toFixed(1)}</div>
-                    {canBeGood && (
-                      <div className="text-sm font-mono text-red-400 font-bold">−{delta.toFixed(1)}</div>
-                    )}
-                    <div className={`text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 ${canBeGood ? 'text-emerald-400' : 'text-[#6b7280]'}`}>
-                      {canBeGood ? maxMiles.toFixed(1) : 'N/A'}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Time */}
-              {(() => {
-                const currentTime = results.evaluation.totalMinutes;
-                const maxTime = results.evaluation.thresholds.maxTimeForGood || 0;
-                const delta = currentTime - maxTime;
-                const canBeGood = results.evaluation.thresholds.canBeGood;
-                return (
-                  <div>
-                    <div className="text-xs text-[#6b7280] mb-1">Time</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">{formatTime(currentTime, true)}</div>
-                    {canBeGood && (
-                      <div className="text-sm font-mono text-red-400 font-bold">−{formatTime(delta, true)}</div>
-                    )}
-                    <div className={`text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 ${canBeGood ? 'text-emerald-400' : 'text-[#6b7280]'}`}>
-                      {canBeGood ? formatTime(maxTime, true) : 'N/A'}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Items - only show if there are items */}
-              {parseInt(items) > 0 && (() => {
-                const currentItems = parseInt(items) || 0;
-                const maxItems = results.evaluation.thresholds.maxItemsForGood || 0;
-                const delta = currentItems - maxItems;
-                const canBeGood = results.evaluation.thresholds.canBeGood;
-                return (
-                  <div>
-                    <div className="text-xs text-[#6b7280] mb-1">Items</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">{currentItems}</div>
-                    {canBeGood && (
-                      <div className="text-sm font-mono text-red-400 font-bold">−{delta}</div>
-                    )}
-                    <div className={`text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 ${canBeGood ? 'text-emerald-400' : 'text-[#6b7280]'}`}>
-                      {canBeGood ? maxItems : 'N/A'}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Pay */}
-              {(() => {
-                const currentPay = parseFloat(pay) || 0;
-                const minPay = results.evaluation.thresholds.minPayForGood;
-                const delta = minPay - currentPay;
-                return (
-                  <div>
-                    <div className="text-xs text-[#6b7280] mb-1">Pay</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">${currentPay.toFixed(2)}</div>
-                    <div className="text-sm font-mono text-emerald-400 font-bold">+${delta.toFixed(2)}</div>
-                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-emerald-400">
-                      ${minPay.toFixed(2)}
-                    </div>
-                  </div>
-                );
-              })()}
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-[#9ca3af]">What If... Pickup Wait Time</h2>
+              <button
+                onClick={() => setWaitTime(null)}
+                className="text-xs text-[#6b7280] hover:text-emerald-400 transition-colors"
+              >
+                Reset
+              </button>
             </div>
-          </section>
-        )}
 
-        {/* Headroom Card - show when GOOD */}
-        {hasOffer && results && hasRoute && results.verdict === 'good' && (
-          <section className="bg-[#12141a] rounded-2xl border border-[#1e2028] p-4 space-y-3">
-            <h2 className="text-sm font-medium text-[#9ca3af]">Before it goes BAD</h2>
-            <div className={`grid ${parseInt(items) > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-4 text-center`}>
-              {/* Miles */}
-              {(() => {
-                const currentMiles = parseFloat(miles) || 0;
-                const maxMiles = results.evaluation.thresholds.maxMilesBeforeBad ?? 0;
-                const buffer = maxMiles - currentMiles;
-                return (
-                  <div>
-                    <div className="text-xs text-[#6b7280] mb-1">Miles</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">{currentMiles.toFixed(1)}</div>
-                    <div className="text-sm font-mono text-emerald-400 font-bold">
-                      +{buffer.toFixed(1)}
-                    </div>
-                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-red-400">
-                      {maxMiles.toFixed(1)}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Time */}
-              {(() => {
-                const currentTime = results.evaluation.totalMinutes;
-                const maxTime = results.evaluation.thresholds.maxTimeBeforeBad ?? 0;
-                const buffer = maxTime - currentTime;
-                return (
-                  <div>
-                    <div className="text-xs text-[#6b7280] mb-1">Time</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">{formatTime(currentTime, true)}</div>
-                    <div className="text-sm font-mono text-emerald-400 font-bold">
-                      +{formatTime(buffer, true)}
-                    </div>
-                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-red-400">
-                      {formatTime(maxTime, true)}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Items - only show if there are items */}
-              {parseInt(items) > 0 && (() => {
-                const currentItems = parseInt(items) || 0;
-                const maxItems = results.evaluation.thresholds.maxItemsBeforeBad ?? 0;
-                const buffer = maxItems - currentItems;
-                return (
-                  <div>
-                    <div className="text-xs text-[#6b7280] mb-1">Items</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">{currentItems}</div>
-                    <div className="text-sm font-mono text-emerald-400 font-bold">
-                      +{buffer}
-                    </div>
-                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-red-400">
-                      {maxItems}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Pay */}
-              {(() => {
-                const currentPay = parseFloat(pay) || 0;
-                const minPay = results.evaluation.thresholds.minPayBeforeBad;
-                const buffer = currentPay - minPay;
-                return (
-                  <div>
-                    <div className="text-xs text-[#6b7280] mb-1">Pay</div>
-                    <div className="text-lg font-mono text-[#e8e9eb]">${currentPay.toFixed(2)}</div>
-                    <div className="text-sm font-mono text-emerald-400 font-bold">−${buffer.toFixed(2)}</div>
-                    <div className="text-lg font-mono border-t border-[#2a2d38] pt-1 mt-1 text-red-400">
-                      ${minPay.toFixed(2)}
-                    </div>
-                  </div>
-                );
-              })()}
+            {/* Wait time input */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setWaitTime(Math.max(0, actualWaitTime - 1))}
+                className="px-3 py-1.5 text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028] rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                </svg>
+              </button>
+              <div className="flex-1 text-center">
+                <span className="text-2xl font-mono text-[#e8e9eb]">{actualWaitTime}</span>
+                <span className="text-sm text-[#6b7280] ml-1">min</span>
+                {extraMins !== 0 && (
+                  <span className={`text-sm font-mono ml-2 ${extraMins > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    ({extraMins > 0 ? '+' : ''}{extraMins})
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setWaitTime(actualWaitTime + 1)}
+                className="px-3 py-1.5 text-[#6b7280] hover:text-[#e8e9eb] hover:bg-[#1e2028] rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
             </div>
+
+            {/* Quick add buttons */}
+            <div className="flex gap-2 justify-center">
+              {[5, 10, 15, 30].map((mins) => (
+                <button
+                  key={mins}
+                  onClick={() => setWaitTime(actualWaitTime + mins)}
+                  className="px-3 py-1 text-xs font-mono text-[#6b7280] hover:text-emerald-400 hover:bg-[#1e2028] rounded-lg transition-colors"
+                >
+                  +{mins}
+                </button>
+              ))}
+            </div>
+
+            {/* Impact calculation */}
+            {(() => {
+              const currentPay = parseFloat(pay) || 0;
+              const hasChange = extraMins !== 0;
+              const newTotalMins = results.evaluation.totalMinutes + extraMins;
+              const newOrdersPerHour = Math.min(settings.maxOrdersPerHour, 60 / newTotalMins);
+              const newEffectiveHourly = Math.round(currentPay * newOrdersPerHour * 100) / 100;
+
+              // What pay needed for GOOD with new time?
+              const payForGood = Math.round((settings.expectedPay / newOrdersPerHour) * 100) / 100;
+              const payDelta = payForGood - currentPay;
+
+              // New verdict
+              const meetsFloor = settings.minHourlyPay > 0
+                ? newEffectiveHourly >= settings.minHourlyPay
+                : currentPay >= (newTotalMins * settings.expectedPay / 60);
+              const newVerdict = !meetsFloor ? 'BAD' : newEffectiveHourly >= settings.expectedPay ? 'GOOD' : 'DECENT';
+              const verdictColor = newVerdict === 'GOOD' ? 'text-emerald-400' : newVerdict === 'DECENT' ? 'text-yellow-400' : 'text-red-400';
+
+              return (
+                <div className="pt-3 border-t border-[#1e2028] space-y-2">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-xs text-[#6b7280]">New Time</div>
+                      <div className={`text-lg font-mono ${hasChange ? 'text-[#e8e9eb]' : 'text-[#3a3d48]'}`}>
+                        {hasChange ? formatTime(newTotalMins, true) : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-[#6b7280]">New $/hr</div>
+                      <div className={`text-lg font-mono ${hasChange ? verdictColor : 'text-[#3a3d48]'}`}>
+                        {hasChange ? `$${newEffectiveHourly}` : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-[#6b7280]">Verdict</div>
+                      <div className={`text-lg font-bold ${hasChange ? verdictColor : 'text-[#3a3d48]'}`}>
+                        {hasChange ? newVerdict : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-[#1e2028]">
+                    <span className="text-sm text-[#6b7280]">Pay needed for GOOD</span>
+                    <div className="text-right">
+                      <span className={`text-lg font-mono font-bold ${hasChange ? 'text-emerald-400' : 'text-[#3a3d48]'}`}>
+                        {hasChange ? `$${payForGood.toFixed(2)}` : '—'}
+                      </span>
+                      {hasChange && (
+                        <span className="text-sm font-mono text-emerald-400 ml-2">(+${payDelta.toFixed(2)})</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </section>
         )}
 
