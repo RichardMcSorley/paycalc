@@ -12,7 +12,7 @@ A calculator for gig and delivery workers to evaluate whether an order is worth 
 - **Wait Time Simulator** - Model the impact of extra wait time at pickup on your hourly rate
 - **Time Breakdown** - Visual breakdown of pickup, travel, drop-off, and return time
 - **Shareable Links** - Share order evaluations via URL parameters
-- **Screenshot Upload** - Upload a screenshot of an offer to automatically extract pay and mileage details
+- **Screenshot Upload** - Upload a screenshot of an offer to automatically extract pay and mileage details using AI
 
 ### Share Feature
 
