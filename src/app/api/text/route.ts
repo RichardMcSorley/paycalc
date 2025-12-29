@@ -43,13 +43,15 @@ function buildDisplay(
     const currentMiles = parsed.miles;
     const th = evaluation.thresholds;
 
+    const hasItems = parsed.items && parsed.items > 0;
+
     if (evaluation.verdict === 'good') {
       // Show buffer before becoming BAD (miles + extra wait time allowed)
       if (th.maxMilesBeforeBad !== null) {
         const milesBuffer = th.maxMilesBeforeBad - currentMiles;
         display.push(`To BAD: +${milesBuffer.toFixed(1)} mi`);
       }
-      if (th.maxTimeBeforeBad !== null) {
+      if (th.maxTimeBeforeBad !== null && !hasItems) {
         const maxWaitTotal = th.maxTimeBeforeBad - evaluation.totalMinutes + DEFAULT_SETTINGS.extraWaitTime;
         display.push(`Max wait: ${Math.round(maxWaitTotal)}m total`);
       }
@@ -62,8 +64,8 @@ function buildDisplay(
       if (th.maxMilesBeforeBad !== null) {
         const milesToBad = th.maxMilesBeforeBad - currentMiles;
         display.push(`To BAD: +${milesToBad.toFixed(1)} mi`);
-        // Max wait until BAD (total)
-        if (th.maxTimeBeforeBad !== null) {
+        // Max wait until BAD (total) - skip for shopping orders
+        if (th.maxTimeBeforeBad !== null && !hasItems) {
           const maxWaitTotal = th.maxTimeBeforeBad - evaluation.totalMinutes + DEFAULT_SETTINGS.extraWaitTime;
           display.push(`Max wait: ${Math.round(maxWaitTotal)}m total`);
         }
