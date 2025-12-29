@@ -44,7 +44,7 @@ export interface PayReqResult {
 export const DEFAULT_SETTINGS: CalculationSettings = {
   perPickup: 5,
   perDrop: 2,
-  perItem: 1.5,
+  perItem: 1,
   avgSpeed: 35,
   expectedPay: 21,
   minHourlyPay: 19.5,
