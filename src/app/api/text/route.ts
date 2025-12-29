@@ -44,8 +44,8 @@ function buildDisplay(
         display.push(`To BAD: +${milesBuffer.toFixed(1)} mi`);
       }
       if (th.maxTimeBeforeBad !== null) {
-        const extraWaitBuffer = th.maxTimeBeforeBad - evaluation.totalMinutes;
-        display.push(`Max wait: +${Math.round(extraWaitBuffer)}m`);
+        const maxWaitTotal = th.maxTimeBeforeBad - evaluation.totalMinutes + DEFAULT_SETTINGS.extraWaitTime;
+        display.push(`Max wait: ${Math.round(maxWaitTotal)}m total`);
       }
     } else if (evaluation.verdict === 'decent') {
       // Show miles to GOOD and miles to BAD
@@ -56,12 +56,10 @@ function buildDisplay(
       if (th.maxMilesBeforeBad !== null) {
         const milesToBad = th.maxMilesBeforeBad - currentMiles;
         display.push(`To BAD: +${milesToBad.toFixed(1)} mi`);
-        // Extra wait until BAD
-        const extraWaitBuffer = th.maxTimeBeforeBad !== null
-          ? th.maxTimeBeforeBad - evaluation.totalMinutes
-          : null;
-        if (extraWaitBuffer !== null) {
-          display.push(`Max wait: +${Math.round(extraWaitBuffer)}m`);
+        // Max wait until BAD (total)
+        if (th.maxTimeBeforeBad !== null) {
+          const maxWaitTotal = th.maxTimeBeforeBad - evaluation.totalMinutes + DEFAULT_SETTINGS.extraWaitTime;
+          display.push(`Max wait: ${Math.round(maxWaitTotal)}m total`);
         }
       }
     } else {
@@ -83,6 +81,16 @@ function buildDisplay(
     display.push(`Max ${evaluation.maxMiles.toFixed(1)} mi`);
     display.push(`Max ${evaluation.maxItems} items`);
   }
+
+  // === URL ===
+  const params = new URLSearchParams();
+  if (parsed.pay !== undefined) params.set('pay', String(parsed.pay));
+  if (parsed.pickups !== undefined) params.set('pickups', String(parsed.pickups));
+  if (parsed.drops !== undefined) params.set('drops', String(parsed.drops));
+  if (parsed.miles !== undefined) params.set('miles', String(parsed.miles));
+  if (parsed.items !== undefined) params.set('items', String(parsed.items));
+  display.push('——————');
+  display.push(`https://paycalc-psi.vercel.app/?${params.toString()}`);
 
   return display;
 }
