@@ -1,6 +1,91 @@
 import { fal } from '@fal-ai/client';
 import { headers } from 'next/headers';
-import { evaluateOffer, DEFAULT_SETTINGS } from '@/lib/calculations';
+import { evaluateOffer, DEFAULT_SETTINGS, OfferEvaluation } from '@/lib/calculations';
+
+// Build compact display array for iOS shortcuts
+function buildDisplay(
+  parsed: { pay?: number; pickups?: number; drops?: number; miles?: number; items?: number; restaurants?: string[] },
+  evaluation: OfferEvaluation | null
+): string[] {
+  const display: string[] = [];
+
+  if (!evaluation) {
+    display.push('⚠️ Could not evaluate');
+    return display;
+  }
+
+  // === VERDICT ===
+  display.push(`${evaluation.verdictEmoji} ${evaluation.verdictText} — $${evaluation.effectiveHourly.toFixed(0)}/hr`);
+
+  // === OFFER ===
+  const offerParts: string[] = [];
+  if (parsed.pay !== undefined) offerParts.push(`$${parsed.pay.toFixed(2)}`);
+  if (parsed.miles !== undefined && parsed.miles > 0) offerParts.push(`${parsed.miles.toFixed(1)} mi`);
+  if (parsed.pickups !== undefined || parsed.drops !== undefined) {
+    const p = parsed.pickups ?? 1;
+    const d = parsed.drops ?? 1;
+    offerParts.push(`${p}→${d}`);
+  }
+  if (parsed.items && parsed.items > 0) offerParts.push(`${parsed.items} items`);
+  if (offerParts.length > 0) {
+    display.push(offerParts.join(' · '));
+  }
+
+  // === BUFFER ===
+  if (parsed.miles && parsed.miles > 0) {
+    display.push('——————');
+    const currentMiles = parsed.miles;
+    const th = evaluation.thresholds;
+
+    if (evaluation.verdict === 'good') {
+      // Show buffer before becoming BAD (miles + extra wait time allowed)
+      if (th.maxMilesBeforeBad !== null) {
+        const milesBuffer = th.maxMilesBeforeBad - currentMiles;
+        display.push(`To BAD: +${milesBuffer.toFixed(1)} mi`);
+      }
+      if (th.maxTimeBeforeBad !== null) {
+        const extraWaitBuffer = th.maxTimeBeforeBad - evaluation.totalMinutes;
+        display.push(`Max wait: +${Math.round(extraWaitBuffer)}m`);
+      }
+    } else if (evaluation.verdict === 'decent') {
+      // Show miles to GOOD and miles to BAD
+      if (th.maxMilesForGood !== null) {
+        const milesToGood = th.maxMilesForGood - currentMiles;
+        display.push(`To GOOD: ${milesToGood.toFixed(1)} mi`);
+      }
+      if (th.maxMilesBeforeBad !== null) {
+        const milesToBad = th.maxMilesBeforeBad - currentMiles;
+        display.push(`To BAD: +${milesToBad.toFixed(1)} mi`);
+        // Extra wait until BAD
+        const extraWaitBuffer = th.maxTimeBeforeBad !== null
+          ? th.maxTimeBeforeBad - evaluation.totalMinutes
+          : null;
+        if (extraWaitBuffer !== null) {
+          display.push(`Max wait: +${Math.round(extraWaitBuffer)}m`);
+        }
+      }
+    } else {
+      // BAD - show what's needed
+      const milesToDecent = th.maxMilesForDecent - currentMiles;
+      display.push(`To DECENT: ${milesToDecent.toFixed(1)} mi`);
+      if (th.canBeGood) {
+        const milesToGood = th.maxMilesForGood !== null ? th.maxMilesForGood - currentMiles : null;
+        if (milesToGood !== null) {
+          display.push(`To GOOD: ${milesToGood.toFixed(1)} mi`);
+        }
+      }
+    }
+  }
+
+  // === LIMITS (when no miles) ===
+  if (!parsed.miles || parsed.miles === 0) {
+    display.push('——————');
+    display.push(`Max ${evaluation.maxMiles.toFixed(1)} mi`);
+    display.push(`Max ${evaluation.maxItems} items`);
+  }
+
+  return display;
+}
 
 fal.config({
   credentials: process.env.FAL_KEY,
@@ -28,6 +113,7 @@ export async function GET() {
     },
     response: {
       parsed: { pay: 'number', pickups: 'number', drops: 'number', miles: 'number', items: 'number', restaurants: 'string[]' },
+      display: 'string[] - Compact formatted lines for iOS shortcut list display',
       summary: 'Quick summary for display',
       url: 'https://paycalc.app/?pay=X&miles=Y&...'
     },
@@ -125,9 +211,13 @@ export async function POST(request: Request) {
       }, DEFAULT_SETTINGS);
     }
 
+    // Build display array for iOS shortcuts
+    const display = buildDisplay(parsed, evaluation);
+
     return Response.json({
       parsed,
       evaluation,
+      display,
       summary: evaluation?.summary || 'Could not evaluate offer',
       url,
       pay: parsed.pay,
