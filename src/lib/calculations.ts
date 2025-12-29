@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: CalculationSettings = {
   perItem: 1.5,
   avgSpeed: 35,
   expectedPay: 21,
-  minHourlyPay: 0,
+  minHourlyPay: 19.5,
   maxOrdersPerHour: 3,
   return1Drop: 100,
   return2Drop: 50,
