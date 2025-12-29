@@ -168,7 +168,7 @@ Output: {"pay": 12, "pickups": 2, "miles": 5, "restaurants": []}`;
 
 export async function POST(request: Request) {
   try {
-    const { text } = await request.json();
+    const { text, userId, appName } = await request.json();
 
     if (!text) {
       return Response.json({ error: 'No text provided' }, { status: 400, headers: corsHeaders });
@@ -227,6 +227,29 @@ export async function POST(request: Request) {
 
     // Build display array for iOS shortcuts
     const display = buildDisplay(parsed, evaluation);
+
+    // If userId and appName are provided, send request to external server
+    if (userId && appName && evaluation) {
+      try {
+        await fetch('https://breather-chi.vercel.app/api/delivery-orders/offer-details', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId,
+            appName,
+            pay: parsed.pay ?? 0,
+            miles: parsed.miles ?? 0,
+            pickups: parsed.pickups ?? 1,
+            restaurants: parsed.restaurants ?? [],
+          }),
+        });
+      } catch (error) {
+        // Log error but don't fail the request
+        console.error('Error sending offer details to external server:', error);
+      }
+    }
 
     return Response.json({
       parsed,
