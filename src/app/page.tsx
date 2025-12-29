@@ -113,8 +113,13 @@ export default function Home() {
     }
   }, []);
 
+  // Track if we've initialized from URL params to avoid overwriting on first render
+  const initializedFromUrl = useRef(false);
+
   // Load values from URL parameters (for sharing/external API calls)
   useEffect(() => {
+    if (initializedFromUrl.current) return;
+    
     const params = new URLSearchParams(window.location.search);
 
     const urlPay = params.get('pay');
@@ -129,11 +134,30 @@ export default function Home() {
     if (urlMiles) setMiles(urlMiles);
     if (urlItems) setItems(urlItems);
 
-    // Clean URL after loading params (optional - keeps URL clean)
-    if (params.toString()) {
-      window.history.replaceState({}, '', window.location.pathname);
-    }
+    initializedFromUrl.current = true;
   }, []);
+
+  // Sync form state to URL query parameters whenever order details change
+  useEffect(() => {
+    // Skip if we haven't initialized from URL yet (to avoid overwriting initial params)
+    if (!initializedFromUrl.current) return;
+
+    const params = new URLSearchParams();
+    
+    // Only add non-default/non-empty values to keep URL clean
+    if (pay) params.set('pay', pay);
+    if (pickups !== '1') params.set('pickups', pickups);
+    if (drops !== '1') params.set('drops', drops);
+    if (miles) params.set('miles', miles);
+    if (items !== '0') params.set('items', items);
+
+    const newUrl = params.toString()
+      ? `${window.location.pathname}?${params.toString()}`
+      : window.location.pathname;
+
+    // Update URL without causing a page reload
+    window.history.replaceState({}, '', newUrl);
+  }, [pay, pickups, drops, miles, items]);
 
   // Save settings to localStorage
   const updateSettings = (newSettings: CalculationSettings) => {
