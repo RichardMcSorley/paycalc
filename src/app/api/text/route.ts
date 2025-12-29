@@ -31,9 +31,15 @@ function buildDisplay(
     display.push(offerParts.join(' · '));
   }
 
+  // === TIME ===
+  const totalTime = evaluation.totalMinutes + DEFAULT_SETTINGS.extraWaitTime;
+  const timeStr = totalTime >= 60
+    ? `${Math.floor(totalTime / 60)}h ${Math.round(totalTime % 60)}m`
+    : `${Math.round(totalTime)}m`;
+  display.push(`⏱ ${timeStr} to complete`);
+
   // === BUFFER ===
   if (parsed.miles && parsed.miles > 0) {
-    display.push('——————');
     const currentMiles = parsed.miles;
     const th = evaluation.thresholds;
 
@@ -77,7 +83,6 @@ function buildDisplay(
 
   // === LIMITS (when no miles) ===
   if (!parsed.miles || parsed.miles === 0) {
-    display.push('——————');
     display.push(`Max ${evaluation.maxMiles.toFixed(1)} mi`);
     display.push(`Max ${evaluation.maxItems} items`);
   }
