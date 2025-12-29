@@ -32,7 +32,7 @@ function buildDisplay(
   }
 
   // === TIME ===
-  const totalTime = evaluation.totalMinutes + DEFAULT_SETTINGS.extraWaitTime;
+  const totalTime = evaluation.totalMinutes;
   const timeStr = totalTime >= 60
     ? `${Math.floor(totalTime / 60)}h ${Math.round(totalTime % 60)}m`
     : `${Math.round(totalTime)}m`;
