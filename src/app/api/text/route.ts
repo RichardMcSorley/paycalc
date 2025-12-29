@@ -15,7 +15,7 @@ function buildDisplay(
   }
 
   // === VERDICT ===
-  display.push(`${evaluation.verdictEmoji} ${evaluation.verdictText} — $${evaluation.effectiveHourly.toFixed(0)}/hr`);
+  display.push(`${evaluation.verdictEmoji} ${evaluation.verdictText} — $${evaluation.effectiveHourly.toFixed(2)}/hr`);
 
   // === OFFER ===
   const offerParts: string[] = [];
@@ -89,7 +89,6 @@ function buildDisplay(
   if (parsed.drops !== undefined) params.set('drops', String(parsed.drops));
   if (parsed.miles !== undefined) params.set('miles', String(parsed.miles));
   if (parsed.items !== undefined) params.set('items', String(parsed.items));
-  display.push('——————');
   display.push(`https://paycalc-psi.vercel.app/?${params.toString()}`);
 
   return display;
